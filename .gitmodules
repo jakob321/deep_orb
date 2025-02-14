@@ -1,0 +1,6 @@
+[submodule "ORB_SLAM3"]
+	path = ORB_SLAM3
+	url = git@github.com:jakob321/ORB_SLAM3.git
+[submodule "ml-depth-pro"]
+	path = ml-depth-pro
+	url = git@github.com:jakob321/ml-depth-pro.git

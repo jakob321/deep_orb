@@ -1,0 +1,30 @@
+
+services:
+  deep_orb:
+    image: deep_orb
+    volumes:
+      - /etc/timezone:/etc/timezone:rw
+      - /etc/localtime:/etc/localtime:rw
+      - ./ORB_SLAM3/:/root/deep_orb/ORB_SLAM3/
+      - ./ml-depth-pro/:/root/deep_orb/ml-depth-pro/
+      - ./datasets/:/root/deep_orb/datasets/
+      - ./ws/:/root/deep_orb/ws/
+    privileged: true
+    network_mode: host
+    ipc: host
+    stdin_open: true
+    tty: true
+    environment:
+      - DISPLAY
+      - NVIDIA_VISIBLE_DEVICES=all  # Expose all GPUs
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics  # CUDA + OpenGL support
+      - PYTHONPATH="/root/deep_orb/src/ORB_SLAM3/lib"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    working_dir: /root/deep_orb/
+    entrypoint: /bin/bash
