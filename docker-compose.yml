@@ -18,7 +18,7 @@ services:
       - DISPLAY
       - NVIDIA_VISIBLE_DEVICES=all  # Expose all GPUs
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics  # CUDA + OpenGL support
-      - PYTHONPATH="/root/deep_orb/src/ORB_SLAM3/lib"
+      - PYTHONPATH=/root/deep_orb/ORB_SLAM3/lib
     deploy:
       resources:
         reservations:
@@ -27,4 +27,4 @@ services:
               count: all
               capabilities: [gpu]
     working_dir: /root/deep_orb/
-    entrypoint: /bin/bash
+    #entrypoint: /bin/bash
