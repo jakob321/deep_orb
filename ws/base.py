@@ -57,7 +57,7 @@ def run_orb_slam():
         time.sleep(0.01)
     return pose_list, points_list
 
-def run_depth_pro(pose_list, save=False):
+def run_depth_pro(pose_list, points_list, save=False):
     # Model init
     print("Loading model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -75,10 +75,11 @@ def run_depth_pro(pose_list, save=False):
     depth_image_list = []
     original_image_list=[]
     selected_pose_list=[]
+    selected_points=[]
 
     for i, path in enumerate(image_paths):
-        if i % 30 > 0: # Not using all of the images
-            continue
+        if i==0: continue
+        if i % 1 > 0: continue
 
         print("starting img: ", path)
         original_image = np.asarray(Image.open(path))
@@ -96,15 +97,21 @@ def run_depth_pro(pose_list, save=False):
         original_image_list.append(original_image)
         depth_image_list.append(depth)
         selected_pose_list.append(pose_list[:,:,i])
+        selected_points.append(points_list[i])
     
     print("done with depth prediction")
 
     all_pose = np.stack(selected_pose_list, axis=0)
     all_depth = np.stack(depth_image_list, axis=0)
     all_orig = np.stack(original_image_list, axis=0)
+    for entry in selected_points:
+        print(entry.shape)
+    all_points = np.empty(len(selected_points), dtype=object)
+    for idx, pts in enumerate(selected_points):
+        all_points[idx] = pts
 
     if save:
-        np.savez("saved_data.npz", pose=all_pose, depth=all_depth, orig=all_orig)
+        np.savez("saved_data.npz", pose=all_pose, depth=all_depth, orig=all_orig, points=all_points)
 
     return all_pose, all_depth, all_orig
 
@@ -153,16 +160,16 @@ def project(all_pose, all_depth, all_orig):
 
 def load_data():
     all_data=np.load("saved_data.npz", allow_pickle=True)
-    return all_data["pose"], all_data["depth"], all_data["orig"]
+    return all_data["pose"], all_data["depth"], all_data["orig"], all_data["points"]
 
 
 if __name__ == "__main__":
     use_saved_values=False
     if not use_saved_values:
         pose_list, points_list = run_orb_slam()
-        all_pose, all_depth, all_orig = run_depth_pro(pose_list, save=True)
+        all_pose, all_depth, all_orig = run_depth_pro(pose_list, points_list, save=True)
     else:
-        all_pose, all_depth, all_orig = load_data()
+        all_pose, all_depth, all_orig, points_list = load_data()
     project(all_pose, all_depth, all_orig)
 
     print("done")

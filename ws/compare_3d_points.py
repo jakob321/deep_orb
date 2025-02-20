@@ -108,20 +108,23 @@ def run_depth_pro(pose_list, save=False):
 
     return all_pose, all_depth, all_orig
 
-def project(all_pose, all_depth, all_orig):
+def project(all_pose, all_depth, all_orig, points_list):
     WIDTH = all_orig.shape[2]
     HEIGHT = all_orig.shape[1]
     intrinsic = o3d.camera.PinholeCameraIntrinsic(WIDTH, HEIGHT, fx, fy, cx, cy)
+    visualizer=None
     cam = o3d.visualization.rendering.Camera
-    vizualizer = o3d.visualization.Visualizer()
-    vizualizer.create_window()
-    vizualizer.create_window(width=WIDTH, height=HEIGHT)
+
+    visualizer = o3d.visualization.Visualizer()
+    visualizer.create_window(width=WIDTH, height=HEIGHT)
+
     scale_factor = 0.01  # ORB-SLAM do not know scale --> needs to be manualy tuned for now
 
     for i in range(all_depth.shape[0]):
         color_raw = o3d.geometry.Image(all_orig[i,:,:,:])
         depth_raw = o3d.geometry.Image(all_depth[i,:,:])
         position = np.linalg.inv(np.array(all_pose[i,:,:]))
+        
 
         # Scale only the translation (last column, first three rows)
         position[:3, 3] *= scale_factor  # Scale translation (Tx, Ty, Tz)
@@ -133,24 +136,38 @@ def project(all_pose, all_depth, all_orig):
             rgbd_image,
             intrinsic
         )
+        #pcd.transform([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
 
         # Apply the transformed (scaled) pose matrix
         pcd.transform(np.linalg.inv(position))
-        vizualizer.add_geometry(pcd)
+        visualizer.add_geometry(pcd)
+        
+        
 
         # draw camera representation
-        standardCameraParametersObj = vizualizer.get_view_control().convert_to_pinhole_camera_parameters()
+        standardCameraParametersObj = visualizer.get_view_control().convert_to_pinhole_camera_parameters()
         cameraLines = o3d.geometry.LineSet.create_camera_visualization(
             view_width_px=WIDTH, 
             view_height_px=HEIGHT, 
             intrinsic=standardCameraParametersObj.intrinsic.intrinsic_matrix, 
             extrinsic=position,
             scale=0.001)
-        vizualizer.add_geometry(cameraLines)
+        visualizer.add_geometry(cameraLines)
 
-    vizualizer.run()
+    combined_coords = np.concatenate(points_list, axis=1)
+    frame_points = combined_coords.T*scale_factor
+    orb_points = o3d.geometry.PointCloud()
+    orb_points.points = o3d.utility.Vector3dVector(frame_points)
+    visualizer.add_geometry(orb_points)
 
-def draw_points(all_coords):
+        #o3d.visualization.draw_geometries([cameraLines,orb_points,pcd])
+        
+    
+    visualizer.run()
+    return visualizer
+
+
+def draw_points(all_coords, input_visualizer=False):
     """
     Combine a list of numpy arrays (each of shape (3, N)) into one point cloud
     and visualize it using Open3D.
@@ -172,27 +189,37 @@ def draw_points(all_coords):
     pcd.points = o3d.utility.Vector3dVector(points)
     
     # Create a visualizer window (structure similar to your sample function).
-    visualizer = o3d.visualization.Visualizer()
-    visualizer.create_window(window_name="Combined Point Cloud", width=800, height=600)
+    if not input_visualizer:
+        visualizer = o3d.visualization.Visualizer()
+        visualizer.create_window(width=WIDTH, height=HEIGHT)
+    else:
+        visualizer=input_visualizer
+
+
     visualizer.add_geometry(pcd)
-    
-    # Run the visualization loop.
-    visualizer.run()
-    #visualizer.destroy_window()
+    return visualizer
+
 
 
 def load_data():
     all_data=np.load("saved_data.npz", allow_pickle=True)
-    return all_data["pose"], all_data["depth"], all_data["orig"]
+    return all_data["pose"], all_data["depth"], all_data["orig"], all_data["points"]
 
 
 if __name__ == "__main__":
-    pose_list, points_list = run_orb_slam()
-    # print(len(points_list))
-    # for entry in points_list:
-    #     print(entry.shape)
-    # print(points_list[100])
-    draw_points(points_list)
+    #pose_list, points_list = run_orb_slam()
+    #all_pose, all_depth, all_orig = load_data()
+    all_pose, all_depth, all_orig, points_list = load_data()
+    i=5
+    all_orig = all_orig[(i-1):i,:,:,:]
+    all_depth = all_depth[(i-1):i,:,:]
+    all_pose = all_pose[(i-1):i,:,:]
+    visualizer = project(all_pose, all_depth, all_orig,points_list)
+    #visualizer = draw_points(points_list, input_visualizer=visualizer)
+    print(type(visualizer))
+    
+
+    
     # use_saved_values=True
     # if not use_saved_values:
     #     pose_list, points_list = run_orb_slam()

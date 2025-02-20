@@ -83,7 +83,7 @@ if __name__ == "__main__":
     selected_pose_list=[]
 
     for i, path in enumerate(image_paths):
-        if i % 30 > 0: # Not using all of the images
+        if i % 10 > 0: # Not using all of the images
             continue
 
         print("starting img: ", path)
