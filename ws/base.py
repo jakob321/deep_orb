@@ -78,8 +78,8 @@ def run_depth_pro(pose_list, points_list, save=False):
     selected_points=[]
 
     for i, path in enumerate(image_paths):
-        if i==0: continue
-        if i % 1 > 0: continue
+        #if i==0: continue
+        if i % 10 > 0: continue
 
         print("starting img: ", path)
         original_image = np.asarray(Image.open(path))
@@ -111,7 +111,7 @@ def run_depth_pro(pose_list, points_list, save=False):
         all_points[idx] = pts
 
     if save:
-        np.savez("saved_data.npz", pose=all_pose, depth=all_depth, orig=all_orig, points=all_points)
+        np.savez("saved_data10.npz", pose=all_pose, depth=all_depth, orig=all_orig, points=all_points)
 
     return all_pose, all_depth, all_orig
 
