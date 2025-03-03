@@ -5,3 +5,41 @@ pathDatasetEuroc='/Datasets/EuRoC' #Example, it is necesary to change it by the 
 # Monocular Examples
 # echo "Launching MH01 with Monocular sensor"
 # ./Monocular/mono_euroc ../Vocabulary/ORBvoc.txt ./Monocular/EuRoC.yaml "$pathDatasetEuroc"/MH01 ./Monocular/EuRoC_TimeStamps/MH01.txt dataset-MH01_mono
+
+#====
+TODO in container:
+Remove python bindings for the compiled open cv and then install it using pip:
+
+rm -rf /usr/local/lib/python3.10/dist-packages/cv2/
+pip install --no-cache-dir opencv-python opencv-contrib-python
+
+
+suggested dockerfile edits:
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    cmake build-essential git unzip pkg-config \
+    libgl1-mesa-dev libglew-dev libeigen3-dev \
+    python3-dev python3-numpy
+
+# Compile OpenCV (C++ only, Python disabled)
+RUN git clone https://github.com/opencv/opencv.git /opt/opencv
+RUN git clone https://github.com/opencv/opencv_contrib.git /opt/opencv_contrib
+WORKDIR /opt/opencv/build
+
+RUN cmake -D CMAKE_BUILD_TYPE=Release \
+          -D CMAKE_INSTALL_PREFIX=/usr/local \
+          -D OPENCV_EXTRA_MODULES_PATH=/opt/opencv_contrib/modules \
+          -D BUILD_opencv_python3=OFF \   # 🚀 DISABLE PYTHON
+          -D WITH_GTK=ON -D WITH_OPENGL=ON -D WITH_FFMPEG=ON \
+          ..
+
+RUN make -j$(nproc) && make install
+
+# Remove Python OpenCV bindings so Python ignores it
+RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2/
+
+# Install OpenCV for Python
+RUN pip install --no-cache-dir opencv-python opencv-contrib-python
+
+

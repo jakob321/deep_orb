@@ -273,6 +273,150 @@ def correct_dense_depth(sparse_points, dense_depth, r=5, eps=0.01):
     corrected_dense = dense_depth.astype(np.float32) + filtered_correction
     return corrected_dense
 
+def segment_depth_image(depth, n_clusters=4):
+    """
+    Segment a depth image into regions using k-means clustering on pixel location and depth.
+    
+    Parameters:
+      depth     : np.array of shape (H, W) with depth values (float32)
+      n_clusters: Number of clusters (segments) desired
+      
+    Returns:
+      labels    : np.array of shape (H, W) with integer labels for each pixel
+    """
+    H, W = depth.shape
+    
+    # Create a feature vector for each pixel: [row, col, depth]
+    rows, cols = np.indices((H, W))
+    features = np.stack([rows, cols, depth], axis=-1).reshape((-1, 3))
+    
+    # Normalize spatial coordinates to [0,1] (depth is in meters, usually a different scale)
+    features = features.astype(np.float32)
+    features[:, 0] /= (H/2)   # Normalize row coordinate
+    features[:, 1] /= (W/2)   # Normalize column coordinate
+    
+    # Run k-means clustering
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
+    ret, labels, centers = cv2.kmeans(features, n_clusters, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+    labels = labels.flatten().reshape(H, W)
+    
+    return labels
+
+def colorize_labels(labels):
+    """
+    Assign a random color to each label in the segmentation.
+    
+    Parameters:
+      labels : np.array of shape (H, W) with integer labels
+      
+    Returns:
+      color_image : np.array of shape (H, W, 3) in uint8 with colorized regions.
+    """
+    H, W = labels.shape
+    n_labels = labels.max() + 1
+    # Generate random colors for each label
+    colors = np.random.randint(0, 255, (n_labels, 3), dtype=np.uint8)
+    
+    color_image = np.zeros((H, W, 3), dtype=np.uint8)
+    for i in range(n_labels):
+        color_image[labels == i] = colors[i]
+        
+    return color_image
+
+def compute_barycentric_weights_vectorized(v0, v1, v2, query_points):
+    """
+    Compute barycentric weights for a batch of query points with respect to triangles.
+    
+    Parameters:
+      v0, v1, v2    : np.array of shape (M, 2) representing the vertices of M triangles.
+      query_points : np.array of shape (M, 2) representing one query point per triangle.
+      
+    Returns:
+      weights : np.array of shape (M, 3) with barycentric coordinates for each query point.
+    """
+    M = query_points.shape[0]
+    # Stack triangle vertices to shape (M, 3, 2)
+    T = np.stack([v0, v1, v2], axis=1)  # (M,3,2)
+    # Append a column of ones to each vertex to form A with shape (M,3,3)
+    ones = np.ones((M, 3, 1), dtype=T.dtype)
+    A = np.concatenate([T, ones], axis=2)  # (M,3,3)
+    # Build b: for each query point, [qx, qy, 1] -> shape (M, 3)
+    b = np.concatenate([query_points, np.ones((M, 1), dtype=query_points.dtype)], axis=1)  # (M,3)
+    # Solve A * weights = b for each triangle
+    weights = np.linalg.solve(A, b[..., None])  # (M,3,1)
+    return weights.squeeze(axis=2)  # (M,3)
+
+import scipy.spatial
+def compute_correction_map(sparse_points, dense_depth):
+    """
+    Compute a correction map from sparse depth points using triangulated interpolation.
+    
+    Parameters:
+        sparse_points (np.array): Shape (3, N) where:
+                                  - row 0: pixel u (column)
+                                  - row 1: pixel v (row)
+                                  - row 2: sparse depth values
+        dense_depth (np.array): Shape (H, W), the original dense depth map.
+
+    Returns:
+        np.array: Corrected dense depth map.
+    """
+    H, W = dense_depth.shape
+
+    # Extract sparse point coordinates and depth values
+    u_coords, v_coords, sparse_depths = sparse_points
+    u_coords = np.round(u_coords).astype(int)
+    v_coords = np.round(v_coords).astype(int)
+
+    # Ensure indices are within bounds
+    valid_mask = (u_coords >= 0) & (u_coords < W) & (v_coords >= 0) & (v_coords < H)
+    u_coords, v_coords, sparse_depths = u_coords[valid_mask], v_coords[valid_mask], sparse_depths[valid_mask]
+
+    # Get corresponding dense depth values at sparse point locations
+    dense_depths_at_points = dense_depth[v_coords, u_coords]
+
+    # Compute correction differences: how much the sparse depth differs from the dense depth.
+    correction_values = sparse_depths - dense_depths_at_points
+
+    # Create 2D coordinate points from sparse points
+    points_2d = np.vstack((u_coords, v_coords)).T  # shape (N, 2)
+
+    # Perform Delaunay triangulation on the 2D sparse points.
+    tri = scipy.spatial.Delaunay(points_2d)
+
+    # Create a dense grid of pixel coordinates
+    grid_u, grid_v = np.meshgrid(np.arange(W), np.arange(H))
+    grid_points = np.vstack((grid_u.ravel(), grid_v.ravel())).T  # shape (H*W, 2)
+
+    # For each grid point, find the simplex index (triangle index) it belongs to.
+    simplex_indices = tri.find_simplex(grid_points)
+    valid_points_mask = simplex_indices >= 0
+    valid_grid_points = grid_points[valid_points_mask]
+    
+    # For each valid grid point, get the triangle vertices (indices into points_2d)
+    triangle_indices = tri.simplices[simplex_indices[valid_points_mask]]  # shape (M, 3) where M is number of valid grid points
+
+    # Retrieve the triangle vertex coordinates and corresponding correction values
+    v0 = points_2d[triangle_indices[:, 0]]  # shape (M, 2)
+    v1 = points_2d[triangle_indices[:, 1]]  # shape (M, 2)
+    v2 = points_2d[triangle_indices[:, 2]]  # shape (M, 2)
+    corr0 = correction_values[triangle_indices[:, 0]]  # shape (M,)
+    corr1 = correction_values[triangle_indices[:, 1]]  # shape (M,)
+    corr2 = correction_values[triangle_indices[:, 2]]  # shape (M,)
+
+    # Compute barycentric weights for each valid grid point relative to its triangle.
+    weights = compute_barycentric_weights_vectorized(v0, v1, v2, valid_grid_points)  # shape (M, 3)
+
+    # Interpolate correction values using barycentric weights.
+    interpolated_corrections = weights[:, 0] * corr0 + weights[:, 1] * corr1 + weights[:, 2] * corr2
+
+    # Create a copy of the dense depth map and apply the corrections to the valid grid points.
+    corrected_dense_depth = dense_depth.copy()
+    corrected_dense_depth[valid_grid_points[:, 1], valid_grid_points[:, 0]] += interpolated_corrections
+
+    return corrected_dense_depth
+
+
 # ====== Main Process ======
 def main():
     # ====== Configuration ======
@@ -315,24 +459,76 @@ def main():
     true_depth_path = os.path.join(path_depth, f"{frame_str}.png")
     t_depth = np.array(Image.open(true_depth_path).getdata()).reshape(pred_depth[0].shape) / 100
 
-    # ====== Compute Keypoint Percentage Error ======
-    # points_2d[frame_num] is (3, N): rows [u, v, predicted_depth]
-    scaling_factor = predict_orb_scale(points_2d[frame_num], pred_depth[0])
-    points_uvd = points_2d[frame_num] #*50#* scaling_factor
-    points_uvd[2,:] = points_uvd[2, :] * scaling_factor
-    print("scaling_factor: ", scaling_factor)
-    kp_errors, kp_percentage = compute_keypoint_errors(t_depth, points_uvd)
+        # Simulate a dense depth map (H x W)
+    sparse_points=points_2d[frame_num]
+    dense_depth=pred_depth[0]
 
-    # ====== Compute Full Depth Map Absolute Error ======
-    full_errors = compute_full_depth_errors(t_depth, pred_depth[0])
-    rec_full_errors = compute_full_depth_errors(t_depth, rec_pred_depth)
+    # Compute corrected depth map
+    corrected_depth = compute_correction_map(sparse_points, dense_depth)
 
-    # ====== Prepare Histogram Data & Plot Histograms ======
-    bins, kp_errors_flat, full_errors_flat = prepare_histogram_bins(kp_errors, full_errors)
-    plot_error_histograms(kp_errors_flat, full_errors_flat, bins)
+    # Plot results
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 3, 1)
+    plt.title("Original Dense Depth")
+    plt.imshow(dense_depth, cmap='viridis')
+    plt.colorbar()
+    
+    plt.subplot(1, 3, 2)
+    plt.title("Sparse Corrections (Red Dots)")
+    plt.imshow(dense_depth, cmap='viridis')
+    plt.scatter(u_coords, v_coords, c='r', marker='o', label="Sparse Points")
+    plt.legend()
 
-    bins, rf_errors_flat, full_errors_flat = prepare_histogram_bins(rec_full_errors, full_errors)
-    plot_error_histograms(rf_errors_flat, full_errors_flat, bins)
+    plt.subplot(1, 3, 3)
+    plt.title("Corrected Dense Depth")
+    plt.imshow(corrected_depth, cmap='viridis')
+    plt.colorbar()
+
+    plt.tight_layout()
+    plt.show()
+
+    # # Segment the depth image into regions
+    # depth = pred_depth[0]
+    # labels = segment_depth_image(np.log(depth), n_clusters=6)
+    # #labels = segment_depth_image(depth, n_clusters=6)
+    
+    # # Colorize the segmentation for visualization
+    # colored_segments = colorize_labels(labels)
+    
+    # # Plot the original depth image and the segmented color map
+    # plt.figure(figsize=(12, 5))
+    
+    # plt.subplot(1, 2, 1)
+    # plt.title("Depth Image")
+    # plt.imshow(np.squeeze(rgb_img), cmap='gray')
+    # plt.colorbar()
+    
+    # plt.subplot(1, 2, 2)
+    # plt.title("Segmented Surfaces")
+    # plt.imshow(colored_segments)
+    
+    # plt.tight_layout()
+    # plt.show()
+
+    # # ====== Compute Keypoint Percentage Error ======
+    # # points_2d[frame_num] is (3, N): rows [u, v, predicted_depth]
+    # scaling_factor = predict_orb_scale(points_2d[frame_num], pred_depth[0])
+    # points_uvd = points_2d[frame_num] #*50#* scaling_factor
+    # points_uvd[2,:] = points_uvd[2, :] * scaling_factor
+    # print("scaling_factor: ", scaling_factor)
+    # kp_errors, kp_percentage = compute_keypoint_errors(t_depth, points_uvd)
+
+    # # ====== Compute Full Depth Map Absolute Error ======
+    # full_errors = compute_full_depth_errors(t_depth, pred_depth[0])
+    # #rec_full_errors = compute_full_depth_errors(t_depth, rec_pred_depth)
+
+    # # ====== Prepare Histogram Data & Plot Histograms ======
+    # bins, kp_errors_flat, full_errors_flat = prepare_histogram_bins(kp_errors, full_errors)
+    # plot_error_histograms(kp_errors_flat, full_errors_flat, bins)
+
+    # # bins, rf_errors_flat, full_errors_flat = prepare_histogram_bins(rec_full_errors, full_errors)
+    # # plot_error_histograms(rf_errors_flat, full_errors_flat, bins)
 
     print("done")
 
