@@ -142,15 +142,15 @@ def prepare_histogram_bins(errors1, errors2, num_bins=50, epsilon=1e-8):
     bins = np.logspace(np.log10(min_val + epsilon), np.log10(max_val + epsilon), num_bins)
     return bins, errors1_flat, errors2_flat
 
-def plot_error_histograms(errors1, errors2, bins):
+def plot_error_histograms(errors1, label1, errors2, label2, bins):
     """
     Plot a combined histogram comparing keypoint and full depth errors.
     """
     plt.figure(figsize=(8, 6))
     plt.hist(errors1, bins=bins, density=True, alpha=0.5,
-             label="Keypoint Absolute Error", color='blue', edgecolor='black')
+             label=label1, color='blue', edgecolor='black')
     plt.hist(errors2, bins=bins, density=True, alpha=0.5,
-             label="Depth Map Absolute Error", color='red', edgecolor='black')
+             label=label2, color='red', edgecolor='black')
     plt.xscale('log')
     plt.xlabel("Absolute Error (meters, log scale)")
     plt.ylabel("Normalized Frequency")
@@ -171,22 +171,27 @@ def predict_orb_scale(orb_points, deep_points):
     # Compute the ratio for each point
     scales = deep_depths / orb_depths
 
-    # The scaling factor is the median of these ratios
     # Initial robust estimate using the median
     med = np.median(scales)
     # Compute Median Absolute Deviation (MAD)
     mad = np.median(np.abs(scales - med))
     
     # Define inliers as points within threshold_multiplier * MAD of the median
-    threshold_multiplier=1.25
+    threshold_multiplier = 1.25
     inliers = np.abs(scales - med) < threshold_multiplier * mad
+    
+    # Extract the inlier orb points (same shape as orb_points, but fewer points)
+    inlier_orb_points = orb_points[:, inliers]
+    
     if np.sum(inliers) == 0:
-        # Fallback if no inliers are found
-        return med
-    # Recompute the scale using the median of inliers
+        # Fallback if no inliers are found: return median and an empty array of inlier orb points.
+        return med, inlier_orb_points
+
+    # Recompute the scale using the median of inlier ratios.
     scaling_factor = np.median(scales[inliers])
     
-    return scaling_factor
+    return scaling_factor, inlier_orb_points
+
 
 def guided_filter(I, p, r, eps):
     """
@@ -218,211 +223,115 @@ def guided_filter(I, p, r, eps):
     q = mean_a * I + mean_b
     return q
 
+import matplotlib.pyplot as plt
+from matplotlib.tri import Triangulation
+from scipy.interpolate import griddata
 
-def correct_dense_depth(sparse_points, dense_depth, r=5, eps=0.01):
-    """
-    Correct a dense depth map using sparse sensor points via guided filtering.
-    
-    Parameters:
-      sparse_points : np.array of shape (3, N) where:
-                       - row 0: u (column) coordinates
-                       - row 1: v (row) coordinates
-                       - row 2: sensor depth values
-      dense_depth   : np.array of shape (H, W) where each pixel holds the dense depth (in meters)
-      r             : Radius for the guided filter window (default 5)
-      eps           : Regularization parameter for guided filter (default 0.01)
-      
-    Returns:
-      corrected_dense : np.array of shape (H, W) with the corrected dense depth map.
-    """
-    H, W = dense_depth.shape
-
-    # Extract and round coordinates
-    u_coords = np.round(sparse_points[0, :]).astype(int)
-    v_coords = np.round(sparse_points[1, :]).astype(int)
+def plot_correction_mesh_and_depth_image(sparse_points, dense_depth):
+    # Extract coordinates and sensor depths from the sparse_points array
+    u_coords = np.round(sparse_points[0, :]).astype(int)  # x coordinates (columns)
+    v_coords = np.round(sparse_points[1, :]).astype(int)  # y coordinates (rows)
     sensor_depths = sparse_points[2, :]
-
-    # Validate indices (ensure they fall within the image boundaries)
-    valid = (u_coords >= 0) & (u_coords < W) & (v_coords >= 0) & (v_coords < H)
-    u_coords = u_coords[valid]
-    v_coords = v_coords[valid]
-    sensor_depths = sensor_depths[valid]
-
-    # Get the corresponding dense depth values at the sparse point locations
+    
+    # Get the dense depth values at the sparse point locations
     dense_at_points = dense_depth[v_coords, u_coords]
-
-    # Compute correction: sensor depth minus dense depth at that pixel.
+    
+    # Compute corrections (difference between sensor and dense depth)
     corrections = sensor_depths - dense_at_points
 
-    # Create an empty correction map and a weight map for averaging if multiple points land on the same pixel.
-    correction_map = np.zeros_like(dense_depth, dtype=np.float32)
-    weight_map = np.zeros_like(dense_depth, dtype=np.float32)
+    # Create a triangulation over the (u,v) points
+    triang = Triangulation(u_coords, v_coords)
 
-    # Use np.add.at to accumulate corrections and counts at each (v,u) location
-    np.add.at(correction_map, (v_coords, u_coords), corrections)
-    np.add.at(weight_map, (v_coords, u_coords), 1.0)
+    # Create a figure with two subplots: one for the 3D mesh and one for the depth image
+    fig = plt.figure(figsize=(12, 6))
+    
+    # --- Plot 3D Triangular Mesh ---
+    ax1 = fig.add_subplot(121, projection='3d')
+    # Plot a trisurf using the sparse point coordinates and their correction values
+    ax1.plot_trisurf(u_coords, v_coords, corrections,
+                     triangles=triang.triangles, cmap='viridis', edgecolor='none')
+    ax1.set_xlabel('u (pixel)')
+    ax1.set_ylabel('v (pixel)')
+    ax1.set_zlabel('Correction (m)')
+    ax1.set_title('Triangular Mesh of Correction')
 
-    # Avoid division by zero: where weight_map is non-zero, average the corrections.
-    nonzero = weight_map > 0
-    correction_map[nonzero] /= weight_map[nonzero]
-
-    # Guided filtering: Use the dense depth as the guidance image to smoothly propagate the sparse corrections.
-    filtered_correction = guided_filter(dense_depth.astype(np.float32), correction_map, r, eps)
-    
-    # Add the filtered correction to the original dense depth map.
-    corrected_dense = dense_depth.astype(np.float32) + filtered_correction
-    return corrected_dense
-
-def segment_depth_image(depth, n_clusters=4):
-    """
-    Segment a depth image into regions using k-means clustering on pixel location and depth.
-    
-    Parameters:
-      depth     : np.array of shape (H, W) with depth values (float32)
-      n_clusters: Number of clusters (segments) desired
-      
-    Returns:
-      labels    : np.array of shape (H, W) with integer labels for each pixel
-    """
-    H, W = depth.shape
-    
-    # Create a feature vector for each pixel: [row, col, depth]
-    rows, cols = np.indices((H, W))
-    features = np.stack([rows, cols, depth], axis=-1).reshape((-1, 3))
-    
-    # Normalize spatial coordinates to [0,1] (depth is in meters, usually a different scale)
-    features = features.astype(np.float32)
-    features[:, 0] /= (H/2)   # Normalize row coordinate
-    features[:, 1] /= (W/2)   # Normalize column coordinate
-    
-    # Run k-means clustering
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
-    ret, labels, centers = cv2.kmeans(features, n_clusters, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-    labels = labels.flatten().reshape(H, W)
-    
-    return labels
-
-def colorize_labels(labels):
-    """
-    Assign a random color to each label in the segmentation.
-    
-    Parameters:
-      labels : np.array of shape (H, W) with integer labels
-      
-    Returns:
-      color_image : np.array of shape (H, W, 3) in uint8 with colorized regions.
-    """
-    H, W = labels.shape
-    n_labels = labels.max() + 1
-    # Generate random colors for each label
-    colors = np.random.randint(0, 255, (n_labels, 3), dtype=np.uint8)
-    
-    color_image = np.zeros((H, W, 3), dtype=np.uint8)
-    for i in range(n_labels):
-        color_image[labels == i] = colors[i]
-        
-    return color_image
-
-def compute_barycentric_weights_vectorized(v0, v1, v2, query_points):
-    """
-    Compute barycentric weights for a batch of query points with respect to triangles.
-    
-    Parameters:
-      v0, v1, v2    : np.array of shape (M, 2) representing the vertices of M triangles.
-      query_points : np.array of shape (M, 2) representing one query point per triangle.
-      
-    Returns:
-      weights : np.array of shape (M, 3) with barycentric coordinates for each query point.
-    """
-    M = query_points.shape[0]
-    # Stack triangle vertices to shape (M, 3, 2)
-    T = np.stack([v0, v1, v2], axis=1)  # (M,3,2)
-    # Append a column of ones to each vertex to form A with shape (M,3,3)
-    ones = np.ones((M, 3, 1), dtype=T.dtype)
-    A = np.concatenate([T, ones], axis=2)  # (M,3,3)
-    # Build b: for each query point, [qx, qy, 1] -> shape (M, 3)
-    b = np.concatenate([query_points, np.ones((M, 1), dtype=query_points.dtype)], axis=1)  # (M,3)
-    # Solve A * weights = b for each triangle
-    weights = np.linalg.solve(A, b[..., None])  # (M,3,1)
-    return weights.squeeze(axis=2)  # (M,3)
-
-import scipy.spatial
-def compute_correction_map(sparse_points, dense_depth):
-    """
-    Compute a correction map from sparse depth points using triangulated interpolation.
-    
-    Parameters:
-        sparse_points (np.array): Shape (3, N) where:
-                                  - row 0: pixel u (column)
-                                  - row 1: pixel v (row)
-                                  - row 2: sparse depth values
-        dense_depth (np.array): Shape (H, W), the original dense depth map.
-
-    Returns:
-        np.array: Corrected dense depth map.
-    """
+    # --- Interpolate onto a Grid to Create a Depth Image ---
     H, W = dense_depth.shape
-
-    # Extract sparse point coordinates and depth values
-    u_coords, v_coords, sparse_depths = sparse_points
-    u_coords = np.round(u_coords).astype(int)
-    v_coords = np.round(v_coords).astype(int)
-
-    # Ensure indices are within bounds
-    valid_mask = (u_coords >= 0) & (u_coords < W) & (v_coords >= 0) & (v_coords < H)
-    u_coords, v_coords, sparse_depths = u_coords[valid_mask], v_coords[valid_mask], sparse_depths[valid_mask]
-
-    # Get corresponding dense depth values at sparse point locations
-    dense_depths_at_points = dense_depth[v_coords, u_coords]
-
-    # Compute correction differences: how much the sparse depth differs from the dense depth.
-    correction_values = sparse_depths - dense_depths_at_points
-
-    # Create 2D coordinate points from sparse points
-    points_2d = np.vstack((u_coords, v_coords)).T  # shape (N, 2)
-
-    # Perform Delaunay triangulation on the 2D sparse points.
-    tri = scipy.spatial.Delaunay(points_2d)
-
-    # Create a dense grid of pixel coordinates
     grid_u, grid_v = np.meshgrid(np.arange(W), np.arange(H))
-    grid_points = np.vstack((grid_u.ravel(), grid_v.ravel())).T  # shape (H*W, 2)
+    # Interpolate the corrections onto the grid using linear interpolation.
+    grid_corrections = griddata((u_coords, v_coords), corrections,
+                                (grid_u, grid_v), method='linear')
+    # Some grid points may fall outside the convex hull of the data; fill these with nearest-neighbor interpolation.
+    nan_mask = np.isnan(grid_corrections)
+    if np.any(nan_mask):
+        grid_corrections[nan_mask] = griddata((u_coords, v_coords), corrections,
+                                              (grid_u, grid_v), method='nearest')[nan_mask]
 
-    # For each grid point, find the simplex index (triangle index) it belongs to.
-    simplex_indices = tri.find_simplex(grid_points)
-    valid_points_mask = simplex_indices >= 0
-    valid_grid_points = grid_points[valid_points_mask]
+    # --- Plot the Depth Image ---
+    ax2 = fig.add_subplot(122)
+    im = ax2.imshow((grid_corrections), cmap='viridis', origin='upper')
+    ax2.set_title('Interpolated Correction Depth Image')
+    plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
     
-    # For each valid grid point, get the triangle vertices (indices into points_2d)
-    triangle_indices = tri.simplices[simplex_indices[valid_points_mask]]  # shape (M, 3) where M is number of valid grid points
+    plt.tight_layout()
+    #plt.show()
+    return grid_corrections
 
-    # Retrieve the triangle vertex coordinates and corresponding correction values
-    v0 = points_2d[triangle_indices[:, 0]]  # shape (M, 2)
-    v1 = points_2d[triangle_indices[:, 1]]  # shape (M, 2)
-    v2 = points_2d[triangle_indices[:, 2]]  # shape (M, 2)
-    corr0 = correction_values[triangle_indices[:, 0]]  # shape (M,)
-    corr1 = correction_values[triangle_indices[:, 1]]  # shape (M,)
-    corr2 = correction_values[triangle_indices[:, 2]]  # shape (M,)
+import numpy as np
 
-    # Compute barycentric weights for each valid grid point relative to its triangle.
-    weights = compute_barycentric_weights_vectorized(v0, v1, v2, valid_grid_points)  # shape (M, 3)
+def compare_depth_images(depth1, depth2):
+    """
+    Compare two depth images and compute difference metrics.
 
-    # Interpolate correction values using barycentric weights.
-    interpolated_corrections = weights[:, 0] * corr0 + weights[:, 1] * corr1 + weights[:, 2] * corr2
+    Parameters:
+      depth1: np.array of shape (H, W)
+              Depth image in meters.
+      depth2: np.array of shape (H, W)
+              Depth image in meters.
 
-    # Create a copy of the dense depth map and apply the corrections to the valid grid points.
-    corrected_dense_depth = dense_depth.copy()
-    corrected_dense_depth[valid_grid_points[:, 1], valid_grid_points[:, 0]] += interpolated_corrections
-
-    return corrected_dense_depth
+    Returns:
+      A dictionary containing:
+        - 'median_diff_m': Median of the absolute difference (meters).
+        - 'std_diff_m': Standard deviation of the absolute difference (meters).
+        - 'median_percent_diff': Median percent difference, computed as
+             100 * |depth1 - depth2| / ((depth1 + depth2) / 2)
+    """
+    # Check that the images have the same shape.
+    if depth1.shape != depth2.shape:
+        raise ValueError("Depth images must have the same shape")
+    
+    # Compute the absolute difference.
+    clip_value=600
+    depth1[depth1 > clip_value] = clip_value
+    depth2[depth2 > clip_value] = clip_value
+    diff = depth1 - depth2
+    abs_diff = np.abs(diff)
+    
+    # Calculate median and standard deviation of the differences in meters.
+    median_diff_m = np.median(abs_diff)
+    std_diff_m = np.std(abs_diff)
+    
+    # Compute percent difference relative to the average depth of the two images.
+    avg_depth = (depth1 + depth2) / 2.0
+    # Avoid division by zero using a small epsilon.
+    epsilon = 1e-6
+    avg_depth_safe = np.maximum(avg_depth, epsilon)
+    percent_diff = 100 * abs_diff / avg_depth_safe
+    median_percent_diff = np.median(percent_diff)
+    
+    return {
+        'median_diff_m': median_diff_m,
+        'std_diff_m': std_diff_m,
+        'median_percent_diff': median_percent_diff
+    }
 
 
 # ====== Main Process ======
 def main():
     # ====== Configuration ======
-    frame_num = 150                     # Update as needed
+    frame_num = 200                    # Update as needed
     frame_str = f"{frame_num:05d}"       # e.g., 100 -> "00100"
-    use_saved_values = True             # Toggle to run model inference or load saved data
+    use_saved_values = False             # Toggle to run model inference or load saved data
 
     # ====== Run ORB-SLAM to get keypoint data ======
     temp_save_file = "temp_save2.npz"
@@ -452,41 +361,79 @@ def main():
     
     print("go all data")
 
-    #=====rectify!!=====
-    rec_pred_depth=correct_dense_depth(sparse_points=points_2d[frame_num], dense_depth=pred_depth[0], r=100, eps=0.1)
 
     # ====== Load the true depth image ======
     true_depth_path = os.path.join(path_depth, f"{frame_str}.png")
     t_depth = np.array(Image.open(true_depth_path).getdata()).reshape(pred_depth[0].shape) / 100
 
-        # Simulate a dense depth map (H x W)
-    sparse_points=points_2d[frame_num]
-    dense_depth=pred_depth[0]
-
-    # Compute corrected depth map
-    corrected_depth = compute_correction_map(sparse_points, dense_depth)
-
-    # Plot results
-    plt.figure(figsize=(12, 5))
+    # ====== Compute Keypoint Percentage Error ======
+    # points_2d[frame_num] is (3, N): rows [u, v, predicted_depth]
+    scaling_factor, inlier_orb_points = predict_orb_scale(points_2d[frame_num], pred_depth[0])
+    points_uvd = points_2d[frame_num] #*50#* scaling_factor
+    points_uvd[2,:] = points_uvd[2, :] * scaling_factor
+    inlier_orb_points[2, :] = inlier_orb_points[2, :] * scaling_factor
+    print("scaling_factor: ", scaling_factor)
     
-    plt.subplot(1, 3, 1)
-    plt.title("Original Dense Depth")
-    plt.imshow(dense_depth, cmap='viridis')
-    plt.colorbar()
-    
-    plt.subplot(1, 3, 2)
-    plt.title("Sparse Corrections (Red Dots)")
-    plt.imshow(dense_depth, cmap='viridis')
-    plt.scatter(u_coords, v_coords, c='r', marker='o', label="Sparse Points")
-    plt.legend()
+    #=====rectify!!=====
+    rec_pred_depth=plot_correction_mesh_and_depth_image(inlier_orb_points, pred_depth[0])
+    rec_pred_depth=rec_pred_depth+pred_depth[0]
 
-    plt.subplot(1, 3, 3)
-    plt.title("Corrected Dense Depth")
-    plt.imshow(corrected_depth, cmap='viridis')
-    plt.colorbar()
+    # test
+    # u_coords = np.round(inlier_orb_points[0, :]).astype(int)
+    # v_coords = np.round(inlier_orb_points[1, :]).astype(int)
+    # orb_depth = inlier_orb_points[2, :]
+    # deep_matching_orb = rec_pred_depth[v_coords, u_coords]
+    # #t_matching_orb = t_depth[v_coords, u_coords]
+    # kp_errors = np.abs(deep_matching_orb-orb_depth)
+    # print(kp_errors)
 
-    plt.tight_layout()
+    #kp_errors, kp_percentage = compute_keypoint_errors(t_depth, deep_matching_orb)
+    # full_errors = compute_full_depth_errors(t_depth, pred_depth[0])
+    # rec_full_errors = compute_full_depth_errors(t_depth, rec_pred_depth)
+    # bins, kp_errors_flat, full_errors_flat = prepare_histogram_bins(kp_errors, full_errors)
+    # plot_error_histograms(kp_errors_flat, "1", full_errors_flat, "2", bins)
+
+
+    u_coords = np.round(inlier_orb_points[0, :]).astype(int)
+    v_coords = np.round(inlier_orb_points[1, :]).astype(int)
+
+    rec_full_errors = compute_full_depth_errors(t_depth, rec_pred_depth)
+    full_errors = compute_full_depth_errors(t_depth, pred_depth[0])
+    bins, rec_errors_flat, full_errors_flat = prepare_histogram_bins(rec_full_errors, full_errors)
+    plot_error_histograms(rec_errors_flat, "rec", full_errors_flat, "default", bins)
+
+    dist_to_correct_default = np.abs(t_depth-pred_depth[0])
+    dist_to_correct_rectified = np.abs(t_depth-rec_pred_depth)
+    # Compute improvement per pixel:
+    #   improvement > 0: rectified error is lower (better)
+    #   improvement < 0: rectified error is higher (worse)
+    improvement = dist_to_correct_default - dist_to_correct_rectified
+
+    # Set up the plot
+    plt.figure(figsize=(8, 6))
+    # Use a diverging colormap (blue-white-red) so that zero is centered.
+    # The vmin and vmax are set symmetrically around zero.
+    max_abs_val = np.max(np.abs(improvement))
+    im = plt.imshow(np.log(improvement), cmap='bwr')#, vmin=-max_abs_val, vmax=max_abs_val)
+    plt.colorbar(im, label='Improvement (m)\n(positive: rectified is better)')
+    plt.title('Per-pixel Improvement: Rectified vs Default Depth Map')
+    plt.xlabel('Pixel Column')
+    plt.ylabel('Pixel Row')
+    plt.scatter(u_coords, v_coords, c='red', s=30, marker='o', label='Inlier ORB Points')
+
     plt.show()
+
+    print("error of unchanged depth prediction")
+    print(compare_depth_images(t_depth, pred_depth[0]))
+
+    print("error of rectified depth")
+    print(compare_depth_images(t_depth, rec_pred_depth))
+
+    # Example usage:
+# depth_img1 = np.array([[1.0, 2.0], [3.0, 4.0]])
+# depth_img2 = np.array([[1.1, 1.9], [3.1, 3.8]])
+# result = compare_depth_images(depth_img1, depth_img2)
+# print(result)
 
     # # Segment the depth image into regions
     # depth = pred_depth[0]
