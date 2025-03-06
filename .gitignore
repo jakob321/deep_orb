@@ -1,2 +1,6 @@
 datasets/*
 !datasets/my_datasets.txt
+*.npz
+ws/checkpoints/
+ws/saved_values
+*__pycache__*
