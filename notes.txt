@@ -43,3 +43,11 @@ RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2/
 RUN pip install --no-cache-dir opencv-python opencv-contrib-python
 
 
+pip install h5py
+
+sudo apt remove python3-blinker
+pip install open3d
+sudo apt-get install python3-tk
+
+
+

@@ -27,4 +27,5 @@ services:
               count: all
               capabilities: [gpu]
     working_dir: /root/deep_orb/
+    user: "${UID}:${GID}"
     #entrypoint: /bin/bash

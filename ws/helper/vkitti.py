@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import h5py
+import re
 
 class dataset:
     def __init__(self, dataset_name):
@@ -89,11 +90,20 @@ class dataset:
     
     def get_rgb_folder_path(self):
         return self.path_dataset + "/" + self.active_seq + "/" + self.img_folder_name
-    
+
     def get_all_seq(self):
+        """Gets all subfolder names and sorts them based on the numbers in the name."""
+        
+        def extract_number(filename):
+            """Extracts the first number found in a filename as an integer."""
+            match = re.search(r'\d+', filename)  # Find the first sequence of digits
+            return int(match.group()) if match else float('inf')  # Default to high value if no number
+
         all_items = self.get_all_subfolderes(self.path_dataset)
         self.seq = [os.path.basename(item) for item in all_items if os.path.isdir(item)]
+        self.seq.sort(key=extract_number)  # Sort based on extracted numbers
         return self.seq
+
 
     def get_all_subfolderes(self, folder_path):
         """Returns a list of absolute paths for all objects in the given folder."""
