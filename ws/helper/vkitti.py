@@ -84,7 +84,7 @@ class dataset:
 
     def get_rgb_frame_path(self):
         folder_path = self.path_dataset + "/" + self.active_seq + "/" + self.img_folder_name
-        all_rgb = self.get_all_subfolderes(folder_path)
+        all_rgb = self.get_all_subfolders(folder_path)
         self.nr_of_img = len(all_rgb)
         return all_rgb
     
@@ -99,24 +99,28 @@ class dataset:
             match = re.search(r'\d+', filename)  # Find the first sequence of digits
             return int(match.group()) if match else float('inf')  # Default to high value if no number
 
-        all_items = self.get_all_subfolderes(self.path_dataset)
+        all_items = self.get_all_subfolders(self.path_dataset)
         self.seq = [os.path.basename(item) for item in all_items if os.path.isdir(item)]
         self.seq.sort(key=extract_number)  # Sort based on extracted numbers
         return self.seq
 
 
-    def get_all_subfolderes(self, folder_path):
-        """Returns a list of absolute paths for all objects in the given folder."""
+    def get_all_subfolders(self, folder_path):
+        """Returns a sorted list of absolute paths for all objects in the given folder."""
         if not os.path.isdir(folder_path):
             raise ValueError(f"The path '{folder_path}' is not a valid directory.")
+        
         all_sub = [os.path.abspath(os.path.join(folder_path, item)) for item in os.listdir(folder_path)]
-        return all_sub
+        
+        # Sort by folder name (not full path)
+        return sorted(all_sub, key=lambda x: os.path.basename(x).lower())
+
 
     def get_depth_frame_np(self, nr):
-        frame_path = self.path_depth + "/" + self.active_seq + "/clone"
+        frame_path = self.path_depth + "/" + self.active_seq
         if self.nr_of_img == 0 or not self.depth_img_path:
-            self.depth_img_path = self.get_all_subfolderes(frame_path)
-        img = cv2.imread(self.depth_img_path[nr], cv2.IMREAD_COLOR)
+            self.depth_img_path = self.get_all_subfolders(frame_path)
+        img = cv2.imread(self.depth_img_path[nr], cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise ValueError(f"Error: Unable to load image at '{self.depth_img_path[nr]}'.")
         return img
