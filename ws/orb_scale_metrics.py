@@ -10,13 +10,12 @@ def main():
     
     # We use the dataset vkitti and midair for testing. The sequences have been choosen for ORB to not lose tracking
     
-    # dataset = vkitti.dataset("midair")
-    # print(dataset.get_all_seq())
-    # print(dataset.get_all_seq()[13])
-    # vkitti_seq=[16]
-
-    dataset = vkitti.dataset("vkitti")
+    dataset = vkitti.dataset("midair")
+    print(dataset.get_all_seq())
     vkitti_seq=[0]
+
+    # dataset = vkitti.dataset("vkitti2")
+    # vkitti_seq=[4]
 
     for seq in vkitti_seq:
         dataset.set_sequence(seq) 

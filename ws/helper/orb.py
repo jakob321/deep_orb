@@ -9,7 +9,7 @@ from helper import vkitti
 def run_orb_slam(voc_file, settings_file, path_dataset):
     def run_slam():
         global final_result
-        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=100)
+        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=50)
 
     slam_thread = threading.Thread(target=run_slam)
     slam_thread.start()
@@ -97,33 +97,41 @@ def predict_orb_scale(scales):
 def all_scales(orb_points_list, deep_points_list):
     """
     Computes the ratio between deep network depth and ORB-SLAM depth for multiple frames.
-    
     Parameters:
-        orb_points_list (list of np.array): Each array is (3, N), representing ORB depth points per frame.
-        deep_points_list (list of np.array): Each array represents the dense depth map for the corresponding frame.
-    
+    orb_points_list (list of np.array): Each array is (3, N), representing ORB depth points per frame.
+    deep_points_list (list of np.array): Each array represents the dense depth map for the corresponding frame.
     Returns:
-        np.array of shape (N, 1): A flattened array containing all computed scale ratios across all frames.
+    np.array of shape (N, 1): A flattened array containing all computed scale ratios across all frames.
     """
     all_ratios = []
-
     for i in range(len(orb_points_list)):
         orb_points = orb_points_list[i]
         deep_points = deep_points_list[i]
-
+        
+        # Get height and width of the depth image
+        height, width = deep_points.shape[:2]
+        
         u_coords = np.round(orb_points[0, :]).astype(int)
         v_coords = np.round(orb_points[1, :]).astype(int)
         orb_depths = orb_points[2, :]
-
-        # Get the corresponding dense depth values at ORB point locations.
-        deep_depths = deep_points[v_coords, u_coords]
-
-        # Compute the scale ratio for each point.
-        ratios = deep_depths / orb_depths
-
+        
+        # Check which coordinates are within the image boundaries
+        valid_indices = (u_coords >= 0) & (u_coords < width) & (v_coords >= 0) & (v_coords < height)
+        
+        # Filter coordinates and depths based on validity
+        valid_u_coords = u_coords[valid_indices]
+        valid_v_coords = v_coords[valid_indices]
+        valid_orb_depths = orb_depths[valid_indices]
+        
+        # Get the corresponding dense depth values at valid ORB point locations
+        deep_depths = deep_points[valid_v_coords, valid_u_coords]
+        
+        # Compute the scale ratio for each valid point
+        ratios = deep_depths / valid_orb_depths
+        
         # Append all values into a single list
         all_ratios.extend(ratios)
-
+    
     # Convert to a NumPy array with shape (N, 1)
     return np.array(all_ratios).reshape(-1, 1)
 

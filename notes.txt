@@ -49,5 +49,11 @@ sudo apt remove python3-blinker
 pip install open3d
 sudo apt-get install python3-tk
 
+#----------------------------
+TODO:
+    Implement vkitti v2
+    Implement depth anything v2 metric
+    Implement hypersim
+
 
 
