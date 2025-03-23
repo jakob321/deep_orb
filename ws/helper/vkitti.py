@@ -6,11 +6,12 @@ import re
 from PIL import Image
 
 class dataset:
-    def __init__(self, dataset_name):
+    def __init__(self, dataset_name, environment="winter"):
         available_datasets = ["vkitti", "midair", "vkitti2"]
         if dataset_name not in available_datasets:
             raise Exception("No such dataset")
         self.dataset_name = dataset_name
+        self.environment = environment # winter, fall, spring
         self.nr_of_img = 0
         self.active_seq = ""
         self.path_dataset = ""
@@ -41,9 +42,9 @@ class dataset:
             self.settings_file = "../ORB_SLAM3/Examples/Monocular/KITTI03.yaml"
         if self.dataset_name == "midair":
             # good winter seq: 0,1,2,3
-            self.path_dataset = "../datasets/midair/MidAir/PLE_training/winter/color_right"
-            self.path_depth = "../datasets/midair/MidAir/PLE_training/winter/depth"
-            self.extrinsic_file = "../datasets/midair/MidAir/PLE_training/winter/sensor_records.hdf5"
+            self.path_dataset = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/color_left"
+            self.path_depth = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/depth"
+            self.extrinsic_file = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/sensor_records.hdf5"
             self.img_folder_name = ""
             self.settings_file = "../ORB_SLAM3/Examples/Monocular/midair.yaml"
 
@@ -149,9 +150,10 @@ class dataset:
             frame_path = self.path_depth + "/" + self.active_seq + "/" + self.img_folder_name
             if self.nr_of_img == 0 or not self.depth_img_path:
                 self.depth_img_path = self.get_all_subfolders(frame_path)
-            img = cv2.imread(self.depth_img_path[nr])
+            img = cv2.imread(self.depth_img_path[nr],cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
             if img is None:
                 raise ValueError(f"Error: Unable to load image at '{self.depth_img_path[nr]}'.")
+            #img=img*2
             return img
         elif self.dataset_name == "midair":
             frame_path = self.path_depth + "/" + self.active_seq + "/" + self.img_folder_name
@@ -171,6 +173,7 @@ class dataset:
             img = cv2.imread(self.depth_img_path[nr], cv2.IMREAD_GRAYSCALE)
             if img is None:
                 raise ValueError(f"Error: Unable to load image at '{self.depth_img_path[nr]}'.")
+            #img=img*2
             return img
         raise ValueError(f"Error: Extraction of depth not implemented for this dataset")
         

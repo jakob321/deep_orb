@@ -51,9 +51,9 @@ sudo apt-get install python3-tk
 
 #----------------------------
 TODO:
-    Implement vkitti v2
-    Implement depth anything v2 metric
-    Implement hypersim
+    integrate depth anything v2
 
 
+Can recent depth esitmation cnn be used to create dense maps with absolute scale from drone with singular camera in outdoor environments.
 
+pip install mmcv-lite

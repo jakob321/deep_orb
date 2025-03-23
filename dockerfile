@@ -65,3 +65,14 @@ RUN pip install --no-cache-dir -e .
 
 # RUN chmod +x get_pretrained_models.sh
 # RUN ./get_pretrained_models.sh
+
+# Remove Python OpenCV bindings so Python ignores it
+RUN rm -rf /usr/local/lib/python3.10/dist-packages/cv2/
+
+# Install OpenCV for Python
+RUN pip install --no-cache-dir opencv-python opencv-contrib-python
+RUN pip install h5py
+RUN apt remove python3-blinker -y
+RUN pip install open3d
+RUN apt-get install python3-tk -y
+

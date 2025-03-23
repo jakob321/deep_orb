@@ -9,11 +9,11 @@ import matplotlib.image as mpimg
 
 def main():
     # This file creates metrics for how well the depth prediction network works on selected seq
-    dataset = vkitti.dataset("midair")
+    dataset = vkitti.dataset("midair", environment="spring")
     print(dataset.get_all_seq())
     print(dataset.get_all_seq()[1])
     # vkitti_seq=[14]
-    vkitti_seq=[0]
+    vkitti_seq=[2]
 
     # dataset = vkitti.dataset("vkitti2")
     # print(dataset.get_all_seq())
@@ -25,13 +25,17 @@ def main():
     true_scale_list = []
     pred_scale_list = []
 
+    # depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
+    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
+    depth = deep.DepthModelWrapper(model_name="depth_pro")
+
     for seq in vkitti_seq:
         dataset.set_sequence(seq) 
         pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
         number_of_deep_frames = 10
         deep_frames_index = np.linspace(0, len(points_2d)-1, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]
-        pred_depth, rgb_img = deep.run_if_no_saved_values(rgb_path, override_run=False)
+        pred_depth, rgb_img = depth.run_with_caching(rgb_path, override_run=True)
         selected_orb_frames = [points_2d[i] for i in deep_frames_index]
         scales = orb.all_scales(selected_orb_frames, pred_depth)
         scale_factor, scaled_slam_matrices = orb.compute_true_scale(pose_list, dataset.load_extrinsic_matrices())
@@ -49,29 +53,29 @@ def main():
         pred_scale_list.append(predicted_scale)
         true_scale_list.append(scale_factor)
 
-        comparison_frame = 1
+        comparison_frame = 5
         print("deep frame index")
         print(deep_frames_index)
         t_depth = dataset.get_depth_frame_np(deep_frames_index[comparison_frame])
         t_depth=np.clip(t_depth, 0, 100)
-        p_depth = pred_depth[comparison_frame]
+        p_depth = pred_depth[comparison_frame]*2
         orig_rgb = rgb_img[comparison_frame]
         # Calculate the difference in percentage
         depth_diff_percentage = np.abs(t_depth - p_depth) / (t_depth + 1e-6) * 100  # Adding small epsilon to avoid division by zero
 
         # Create a 2x2 figure
-        plt.figure(figsize=(12, 10))
+        plt.figure(figsize=(12, 100))
 
         # 1. True depth
         plt.subplot(2, 2, 1)
-        plt.imshow(t_depth, cmap='plasma', vmin=0, vmax=100)
+        plt.imshow(t_depth, cmap='plasma', vmin=0, vmax=80)
         plt.colorbar(label='Depth (m)')
         plt.title('True Depth')
         plt.axis('off')
 
         # 2. Predicted depth
         plt.subplot(2, 2, 2)
-        plt.imshow(p_depth, cmap='plasma', vmin=0, vmax=100)
+        plt.imshow(p_depth, cmap='plasma', vmin=0, vmax=80)
         plt.colorbar(label='Depth (m)')
         plt.title('Predicted Depth')
         plt.axis('off')

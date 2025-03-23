@@ -1,4 +1,35 @@
 
+# services:
+#   deep_orb:
+#     image: deep_orb
+#     volumes:
+#       - /etc/timezone:/etc/timezone:rw
+#       - /etc/localtime:/etc/localtime:rw
+#       - ./ORB_SLAM3/:/root/deep_orb/ORB_SLAM3/
+#       - ./ml-depth-pro/:/root/deep_orb/ml-depth-pro/
+#       - ./datasets/:/root/deep_orb/datasets/
+#       - ./ws/:/root/deep_orb/ws/
+#     privileged: true
+#     network_mode: host
+#     ipc: host
+#     stdin_open: true
+#     tty: true
+#     environment:
+#       - DISPLAY
+#       - NVIDIA_VISIBLE_DEVICES=all  # Expose all GPUs
+#       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics  # CUDA + OpenGL support
+#       - PYTHONPATH=/root/deep_orb/ORB_SLAM3/lib
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: all
+#               capabilities: [gpu]
+#     working_dir: /root/deep_orb/
+#     user: "${UID}:${GID}"
+#     #entrypoint: /bin/bash
+
 services:
   deep_orb:
     image: deep_orb
@@ -7,18 +38,22 @@ services:
       - /etc/localtime:/etc/localtime:rw
       - ./ORB_SLAM3/:/root/deep_orb/ORB_SLAM3/
       - ./ml-depth-pro/:/root/deep_orb/ml-depth-pro/
+      - ./Depth-Anything-V2/:/root/deep_orb/Depth-Anything-V2/
       - ./datasets/:/root/deep_orb/datasets/
       - ./ws/:/root/deep_orb/ws/
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket
+      - ${HOME}/.Xauthority:/root/.Xauthority  # Share Xauthority file
     privileged: true
-    network_mode: host
+    network_mode: host  # Required for X11 forwarding
     ipc: host
     stdin_open: true
     tty: true
     environment:
-      - DISPLAY
+      - DISPLAY=${DISPLAY}  # Pass display variable
+      - XAUTHORITY=/root/.Xauthority  # Ensure Xauthority is recognized
       - NVIDIA_VISIBLE_DEVICES=all  # Expose all GPUs
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics  # CUDA + OpenGL support
-      - PYTHONPATH=/root/deep_orb/ORB_SLAM3/lib
+      - PYTHONPATH=/root/deep_orb/ORB_SLAM3/lib:/root/deep_orb/Depth-Anything-V2/metric_depth
     deploy:
       resources:
         reservations:
@@ -28,4 +63,3 @@ services:
               capabilities: [gpu]
     working_dir: /root/deep_orb/
     user: "${UID}:${GID}"
-    #entrypoint: /bin/bash

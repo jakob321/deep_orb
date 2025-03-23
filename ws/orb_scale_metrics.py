@@ -10,9 +10,14 @@ def main():
     
     # We use the dataset vkitti and midair for testing. The sequences have been choosen for ORB to not lose tracking
     
-    dataset = vkitti.dataset("midair")
+    # dataset = vkitti.dataset("vkitti2")
+    # dataset = vkitti.dataset("vkitti2")
+    dataset = vkitti.dataset("midair", environment="spring")
     print(dataset.get_all_seq())
-    vkitti_seq=[0]
+    vkitti_seq=[2]
+    depth = deep.DepthModelWrapper(model_name="depth_pro")
+    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
+    # depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
 
     # dataset = vkitti.dataset("vkitti2")
     # vkitti_seq=[4]
@@ -23,7 +28,8 @@ def main():
         number_of_deep_frames = 10
         deep_frames_index = np.linspace(1, len(points_2d)-1, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]
-        pred_depth, rgb_img = deep.run_if_no_saved_values(rgb_path, override_run=False)
+        pred_depth, rgb_img = depth.run_with_caching(rgb_path, override_run=True)
+        print(rgb_img[0].shape)
         selected_orb_frames = [points_2d[i] for i in deep_frames_index]
         scales = orb.all_scales(selected_orb_frames, pred_depth)
         scale_factor, scaled_slam_matrices = orb.compute_true_scale(pose_list, dataset.load_extrinsic_matrices())
