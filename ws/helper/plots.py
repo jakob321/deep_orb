@@ -28,7 +28,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
       errors2_flat: flattened positive error values from errors2 (or None if errors2 is None).
     """
     errors1_flat = errors1.ravel()
-    errors1_flat = errors1_flat[errors1_flat > 0]
+    # errors1_flat = errors1_flat[errors1_flat > 0]
     
     if errors2 is None:
         min_val = errors1_flat.min()
@@ -40,7 +40,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
         return bins, errors1_flat, None
     else:
         errors2_flat = errors2.ravel()
-        errors2_flat = errors2_flat[errors2_flat > 0]
+        # errors2_flat = errors2_flat[errors2_flat > 0]
         min_val = np.minimum(errors1_flat.min(), errors2_flat.min())
         max_val = np.maximum(errors1_flat.max(), errors2_flat.max())
         if log_scale_x:
@@ -50,7 +50,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
         return bins, errors1_flat, errors2_flat
 
 def plot_error_histograms(errors1, errors2=None, num_bins=50, epsilon=1e-8,
-                          label1="Error 1", label2="Error 2",
+                          label1="Error 1", label2="Error 2", x_ax_label=" ",
                           ground_truth_line=None, pred_line=None,
                           log_scale_x=True):
     """
@@ -90,7 +90,7 @@ def plot_error_histograms(errors1, errors2=None, num_bins=50, epsilon=1e-8,
     if log_scale_x:
         plt.xscale('log')
 
-    plt.xlabel("Absolute Error (meters)" + (" [log scale]" if log_scale_x else ""))
+    plt.xlabel(x_ax_label + (" [log scale]" if log_scale_x else ""))
     plt.ylabel("Normalized Frequency")
     plt.title("Comparison of Depth Absolute Errors")
     plt.legend()

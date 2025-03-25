@@ -6,21 +6,76 @@ from . import generic_helper
 from helper import vkitti
 
 # ====== ORB-SLAM Functions ======
-def run_orb_slam(voc_file, settings_file, path_dataset):
+import threading
+import time
+import orbslam3
+
+# Define global variables that will be accessible from outside
+final_result = None
+current_pose_list = None
+current_points_list = None
+current_points_2d = None
+is_slam_running = False
+
+def run_orb_slam(settings_file, path_dataset):
+    voc_file = "../ORB_SLAM3/Vocabulary/ORBvoc.txt"
+    global current_pose_list, current_points_list, current_points_2d, is_slam_running, final_result
+    
     def run_slam():
         global final_result
-        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=50)
-
+        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=70)
+    
+    # Start the SLAM thread
     slam_thread = threading.Thread(target=run_slam)
     slam_thread.start()
+    is_slam_running = True
+    
+    # Start a separate thread for continuously updating the global variables
+    def update_data():
+        global current_pose_list, current_points_list, current_points_2d, is_slam_running
+        while slam_thread.is_alive():
+            poses, points = orbslam3.get_all_data_np()
+            points_2d = orbslam3.get_2d_points()
+            
+            # Update the global variables
+            current_pose_list = poses.transpose(2, 0, 1) if poses is not None else None
+            current_points_list = points
+            current_points_2d = points_2d[0] if points_2d is not None else None
+            
+            time.sleep(0.01)
+        is_slam_running = False
+    
+    # Start the update thread
+    update_thread = threading.Thread(target=update_data)
+    update_thread.daemon = True  # This thread will exit when the main program exits
+    update_thread.start()
+    
+    # Wait for SLAM to finish
+    slam_thread.join()
+    
+    # Return the final results
+    return current_pose_list, current_points_list, current_points_2d
 
-    pose_list, points_list, points_2d = (0, 0, 0)
-    time.sleep(0)
-    while slam_thread.is_alive():
-        pose_list, points_list = orbslam3.get_all_data_np()
-        points_2d = orbslam3.get_2d_points()
-        time.sleep(0.01)
-    return pose_list.transpose(2, 0, 1), points_list, points_2d[0]
+def started():
+    global current_pose_list
+    return len(current_pose_list)!=0
+
+# Getter functions to access the current data
+def get_current_pose_list():
+    global current_pose_list
+    return current_pose_list
+
+def get_current_points_list():
+    global current_points_list
+    return current_points_list
+
+def get_current_points_2d():
+    global current_points_2d
+    return current_points_2d
+
+def is_slam_thread_running():
+    global is_slam_running
+    return is_slam_running
 
 def predict_orb_scale(orb_points, deep_points):
     u_coords = np.round(orb_points[0, :]).astype(int)
@@ -68,12 +123,11 @@ def compute_keypoint_errors(true_depth, points_uvd):
     return errors, percentage
 
 def run_if_no_saved_values(dataset, override_run=False):
-    voc_file = "../ORB_SLAM3/Vocabulary/ORBvoc.txt"
     settings_file = dataset.settings_file
     path_dataset = dataset.get_rgb_folder_path()
     result = generic_helper.load_data(path_dataset)
     if result == False or override_run:
-        new_result = run_orb_slam(voc_file, settings_file, path_dataset)
+        new_result = run_orb_slam(settings_file, path_dataset)
         generic_helper.save_data(path_dataset, *new_result)
         return new_result
     return result

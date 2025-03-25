@@ -26,8 +26,8 @@ def main():
     pred_scale_list = []
 
     # depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
-    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
-    depth = deep.DepthModelWrapper(model_name="depth_pro")
+    depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
+    # depth = deep.DepthModelWrapper(model_name="depth_pro")
 
     for seq in vkitti_seq:
         dataset.set_sequence(seq) 
@@ -53,7 +53,7 @@ def main():
         pred_scale_list.append(predicted_scale)
         true_scale_list.append(scale_factor)
 
-        comparison_frame = 5
+        comparison_frame = 1
         print("deep frame index")
         print(deep_frames_index)
         t_depth = dataset.get_depth_frame_np(deep_frames_index[comparison_frame])
@@ -63,37 +63,47 @@ def main():
         # Calculate the difference in percentage
         depth_diff_percentage = np.abs(t_depth - p_depth) / (t_depth + 1e-6) * 100  # Adding small epsilon to avoid division by zero
 
-        # Create a 2x2 figure
-        plt.figure(figsize=(12, 100))
+        # Create a 2x2 figure with better proportions and control
+        plt.figure(figsize=(16, 12))  # More reasonable figure size
 
         # 1. True depth
         plt.subplot(2, 2, 1)
         plt.imshow(t_depth, cmap='plasma', vmin=0, vmax=80)
-        plt.colorbar(label='Depth (m)')
+        cbar1 = plt.colorbar(label='Depth (m)', fraction=0.046, pad=0.04)  # Smaller colorbar
+        cbar1.ax.tick_params(labelsize=8)  # Smaller tick labels
         plt.title('True Depth')
         plt.axis('off')
 
         # 2. Predicted depth
         plt.subplot(2, 2, 2)
         plt.imshow(p_depth, cmap='plasma', vmin=0, vmax=80)
-        plt.colorbar(label='Depth (m)')
+        cbar2 = plt.colorbar(label='Depth (m)', fraction=0.046, pad=0.04)  # Smaller colorbar
+        cbar2.ax.tick_params(labelsize=8)  # Smaller tick labels
         plt.title('Predicted Depth')
         plt.axis('off')
 
         # 3. Original RGB image
         plt.subplot(2, 2, 3)
+        # Maintain aspect ratio but constrain size
+        h, w, _ = orig_rgb.shape
+        aspect_ratio = w / h
         plt.imshow(orig_rgb)
         plt.title('Original RGB Image')
         plt.axis('off')
 
         # 4. Depth difference in percentage
         plt.subplot(2, 2, 4)
-        plt.imshow(depth_diff_percentage, cmap='hot', vmin=0, vmax=50)  # Capping at 50% for better visualization
-        plt.colorbar(label='Difference (%)')
+        plt.imshow(depth_diff_percentage, cmap='hot', vmin=0, vmax=50)
+        cbar4 = plt.colorbar(label='Difference (%)', fraction=0.046, pad=0.04)  # Smaller colorbar
+        cbar4.ax.tick_params(labelsize=8)  # Smaller tick labels
         plt.title('Depth Difference (% of true depth)')
         plt.axis('off')
 
-        plt.tight_layout()
+        # Add more space between subplots
+        plt.tight_layout(pad=3.0)
+        plt.subplots_adjust(wspace=0.3, hspace=0.3)
+
+        plt.savefig('depth_comparison.png', dpi=150, bbox_inches='tight')  # Save with good resolution
         plt.show()
     print(true_scale_list)
     print(pred_scale_list)

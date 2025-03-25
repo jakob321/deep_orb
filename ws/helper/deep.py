@@ -154,6 +154,9 @@ class DepthModelWrapper:
         # Default intrinsic parameters (can be adjusted if camera parameters are known)
         # [fx, fy, cx, cy]
         intrinsic = [707.0493, 707.0493, w/2, h/2]  
+        
+        focal_length=w/2
+        # [fx, fy, cx, cy]
         intrinsic = [w/2, h/2, w/2, h/2]  
         
         # Resize to fit model's input size
@@ -250,15 +253,6 @@ class DepthModelWrapper:
                 prediction = self.run_inference_half(image, f_px, label="img")
                 depth = prediction["depth"].cpu().numpy()  # Convert depth tensor to numpy array
                 pred_focal_length = prediction["focallength_px"].cpu().numpy()
-                print("-----------------------focal------------------")
-                print(pred_focal_length)
-
-                # True focal length in pixels
-                true_focal_length = 512  # 1024/2
-
-                # Scale the depth map to match the true focal length
-                # Since depth is inversely proportional to focal length
-                # depth = depth * (pred_focal_length / true_focal_length)
                 
             elif self.model_name == "depth_anything_v2":
                 # For depth_anything_v2, we use cv2 to read the image
@@ -314,7 +308,7 @@ class DepthModelWrapper:
         
         if result == False or override_run:
             new_result = self.process_images(paths)
-            generic_helper.save_data(save_file_path, new_result)
+            generic_helper.save_data(save_file_path, *new_result)
             return new_result
             
         return result
