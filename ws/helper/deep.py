@@ -56,17 +56,33 @@ class DepthModelWrapper:
                 'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
                 'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
             }
+            # default_checkpoint = f"checkpoints/depth_anything_v2_metric_vkitti_{encoder}.pth"
             
             # Create the model
             self.model = DepthAnythingV2(**{**model_configs[encoder], 'max_depth': max_depth})
             
-            # Load checkpoint if provided
             if checkpoint_path:
-                self.model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
+                checkpoint = torch.load(checkpoint_path, map_location='cpu')
             else:
+                # default_checkpoint = f"checkpoints/finetune_v2.pth"
                 default_checkpoint = f"checkpoints/depth_anything_v2_metric_vkitti_{encoder}.pth"
                 print(f"No checkpoint provided, trying to load from default path: {default_checkpoint}")
-                self.model.load_state_dict(torch.load(default_checkpoint, map_location='cpu'))
+                checkpoint = torch.load(default_checkpoint, map_location='cpu')
+
+            # Check if the checkpoint contains a nested 'model' key
+            if isinstance(checkpoint, dict) and 'model' in checkpoint:
+                print("Loading model from training checkpoint structure")
+                state_dict = checkpoint['model']
+            else:
+                print("Loading model directly from state dictionary")
+                state_dict = checkpoint
+
+            # Check for 'module.' prefix from DistributedDataParallel and remove it if needed
+            if all(k.startswith('module.') for k in state_dict.keys()):
+                print("Removing 'module.' prefix from state dictionary keys")
+                state_dict = {k[7:]: v for k, v in state_dict.items()}  # Remove the 'module.' prefix
+
+            self.model.load_state_dict(state_dict)
                 
             self.model = self.model.to(self.device).eval()
         elif model_name == "metric3d":

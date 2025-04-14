@@ -10,11 +10,12 @@ from scipy.spatial import KDTree
 from scipy.ndimage import gaussian_filter
 
 def main():
-    dataset = vkitti.dataset("midair", environment="winter")
+    dataset = vkitti.dataset("midair", environment="fall")
     print(dataset.get_all_seq())
-    vkitti_seq=[0]
-    depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
-    # depth = deep.DepthModelWrapper(model_name="depth_pro")
+    vkitti_seq=[1]
+    # depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
+    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
+    depth = deep.DepthModelWrapper(model_name="depth_pro")
     
     for seq in vkitti_seq:
         dataset.set_sequence(seq)
@@ -27,7 +28,7 @@ def main():
         number_of_deep_frames = 10
         deep_frames_index = np.linspace(1, len(points_2d)-1, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]
-        pred_depth, rgb_img = depth.run_with_caching(rgb_path, override_run=False)
+        pred_depth, rgb_img = depth.run_with_caching(rgb_path, override_run=True)
         
         for i, frame in enumerate(deep_frames_index):
             t_depth = dataset.get_depth_frame_np(frame)

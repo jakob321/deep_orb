@@ -10,9 +10,9 @@ import matplotlib.image as mpimg
 def main():
     dataset = vkitti.dataset("midair", environment="spring")
     vkitti_seq=[2]
-    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
+    depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
     # depth = deep.DepthModelWrapper(model_name="depth_pro")
-    depth = deep.DepthModelWrapper(model_name="metric3d")
+    # depth = deep.DepthModelWrapper(model_name="metric3d")
     
     for seq in vkitti_seq:
         dataset.set_sequence(seq)

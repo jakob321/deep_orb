@@ -27,8 +27,7 @@ def orb_thread_function(settings_file, rgb_folder_path):
     # This function will run in a separate thread
     orb.run_orb_slam(settings_file, rgb_folder_path)
 
-
-def add_view(p_depth, pose, color_image,scale):
+def add_depth(p_depth, pose, color_image,scale):
     global pcd, view_initialized
     pose[:3, 3] *= (scale/1000)
     p_depth[p_depth>50]=0
@@ -75,13 +74,46 @@ def add_view(p_depth, pose, color_image,scale):
     vis.poll_events()
     vis.update_renderer()
 
+def add_camera(pose,scale):
+    global pcd, view_initialized
+    # Update the point cloud geometry
+    vis.update_geometry(pcd)
+    
+    # Draw camera representation
+    cameraLines = o3d.geometry.LineSet.create_camera_visualization(
+        view_width_px=WIDTH,
+        view_height_px=HEIGHT,
+        intrinsic=intrinsic.intrinsic_matrix,
+        extrinsic=np.linalg.inv(pose),
+        scale=0.1
+        )
+
+    # Add the camera lines to the visualizer
+    vis.add_geometry(cameraLines)
+    
+    # Update visualization
+    vis.poll_events()
+    vis.update_renderer()
+
+latest_depth_prediction = None
+latest_depth_rgb_img = None
+depth_done = True
+def run_deep(dataset, depth, index):
+    global depth_done
+    depth_done = False
+    global latest_depth_prediction
+    global latest_depth_rgb_img
+    current_frame = dataset.get_rgb_frame_path()[index]
+    latest_depth_prediction, latest_depth_rgb_img = depth.process_images([current_frame])
+    depth_done = True
+
+
 
 def main():
     # dataset = vkitti.dataset("midair", environment="spring")
     dataset = vkitti.dataset("midair", environment="spring")
-    # print(dataset.get_all_seq())
-    seq = 1
     depth = deep.DepthModelWrapper(model_name="depth_pro")
+    seq = 1
     dataset.set_sequence(seq)
     
     # Start ORB-SLAM in a separate thread
@@ -89,36 +121,37 @@ def main():
         target=orb_thread_function, 
         args=(dataset.settings_file, dataset.get_rgb_folder_path())
     )
+
+
+    deep_thread = threading.Thread(
+        target=run_deep,
+        args=(dataset, depth)
+    )
+
     orb_thread.start()
-    time.sleep(1) # Give ORB-SLAM a moment to initialize
-
-
+    time.sleep(2) # Give ORB-SLAM a moment to initialize
     
-    # Process frames in the main thread
+    # Process camera poses in the main thread
     while orb.is_slam_thread_running():
-        if not orb.started(): continue
-        try:
-            index=len(orb.get_current_pose_list())
-            current_frame = dataset.get_rgb_frame_path()[index]
-            
-        except:
-            continue
-        # print(current_frame)
-        pose_list = orb.get_current_pose_list()
-        if len(pose_list) == 0: continue
-        current_pose = pose_list[-1]
-        pred_depth, rgb_img = depth.process_images([current_frame])
-        pred_depth=pred_depth[0]
-        # pred_depth = dataset.get_depth_frame_np(index)
-        pose_list = orb.get_current_pose_list()
-        
-        scale,_ = orb.compute_true_scale(pose_list, dataset.load_extrinsic_matrices())
-        print(scale)
-        
-        add_view(pred_depth, current_pose, rgb_img[0],scale)
+        if not orb.started() or not len(orb.get_current_pose_list()): continue
+
+        current_poses = orb.get_current_pose_list()
+        latest_pose = current_poses[-1]
+        scale,_ = orb.compute_true_scale(current_poses, dataset.load_extrinsic_matrices())
+
+        global depth_done
+        if depth_done:
+            global latest_depth_prediction
+            global latest_depth_rgb_img
+            add_depth(latest_depth_prediction, latest_pose, latest_depth_rgb_img, scale)
+            deep_thread.join()
+            deep_thread.start()
+        else:
+            add_camera(latest_pose, scale)
     
     # Wait for the ORB thread to complete
     orb_thread.join()
+    deep_thread.join()
     vis.run()
     
 if __name__ == "__main__":

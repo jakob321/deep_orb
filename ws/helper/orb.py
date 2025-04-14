@@ -216,7 +216,8 @@ def compute_true_scale(slam_matrices: np.ndarray, gt_positions: np.ndarray):
     
     # Compute the scale factor
     if slam_path_length == 0:
-        raise ValueError("The SLAM path length is zero. Check your input data.")
+        return 1, slam_matrices
+        # raise ValueError("The SLAM path length is zero. Check your input data.")
     
     scale_factor = gt_path_length / slam_path_length
     
