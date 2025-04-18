@@ -23,7 +23,7 @@ def run_orb_slam(settings_file, path_dataset):
     
     def run_slam():
         global final_result
-        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=70)
+        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=120)
     
     # Start the SLAM thread
     slam_thread = threading.Thread(target=run_slam)

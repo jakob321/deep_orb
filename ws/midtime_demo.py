@@ -17,11 +17,12 @@ cy=HEIGHT/2
 # fy = 721.5377
 # cx = 609.5593
 # cy = 172.8540
-intrinsic = o3d.camera.PinholeCameraIntrinsic(WIDTH, HEIGHT, fx, fy, cx, cy)
-vis = o3d.visualization.Visualizer()
-vis.create_window(width=WIDTH, height=HEIGHT)
-pcd = o3d.geometry.PointCloud()
-vis.add_geometry(pcd)
+if True:
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(WIDTH, HEIGHT, fx, fy, cx, cy)
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(width=WIDTH, height=HEIGHT)
+    pcd = o3d.geometry.PointCloud()
+    vis.add_geometry(pcd)
 
 def orb_thread_function(settings_file, rgb_folder_path):
     # This function will run in a separate thread
@@ -29,7 +30,7 @@ def orb_thread_function(settings_file, rgb_folder_path):
 
 def add_depth(p_depth, pose, color_image,scale):
     global pcd, view_initialized
-    pose[:3, 3] *= (scale/1000)
+    pose[:3, 3] *= (scale/100)
     p_depth[p_depth>50]=0
     # Create RGBD image
     rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
@@ -148,7 +149,7 @@ def run_deep(dataset, depth):
         index = len(orb.get_current_pose_list())-1
         current_frame = dataset.get_rgb_frame_path()[index]
         latest_depth_prediction, latest_rgb_img = depth.process_images([current_frame])
-        depth_done = True
+        is_done = True
         while is_done and should_compute: # Waiting for value to be read in main thread
             time.sleep(0.01)
 
@@ -158,7 +159,7 @@ def main():
     dataset = vkitti.dataset("midair", environment="spring")
     dataset.set_sequence(1)
     # depth = deep.DepthModelWrapper(model_name="depth_pro")
-    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.4, dataset=dataset)
+    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.4)
     
     # Start ORB-SLAM in a separate thread
     orb_thread = threading.Thread(
@@ -180,7 +181,7 @@ def main():
     while orb.is_slam_thread_running():
         if not orb.started() or not len(orb.get_current_pose_list()): 
             continue # wait until we get our first value
-
+        # print("orb is running")
         global is_done, latest_depth_prediction, latest_rgb_img, should_compute
         should_compute = True # make sure depth predictions is done
 
@@ -191,7 +192,8 @@ def main():
 
         # Check if new depth prediction is done, else only add camera pose
         if is_done:
-            add_depth(latest_depth_prediction, latest_pose, latest_depth_rgb_img, scale)
+            print("depth done :)))")
+            add_depth(latest_depth_prediction, latest_pose, latest_rgb_img, scale)
             is_done = False
         else:
             pass

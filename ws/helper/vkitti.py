@@ -112,9 +112,11 @@ class dataset:
 
     def get_rgb_frame_path(self):
         folder_path = self.path_dataset + "/" + self.active_seq + "/" + self.img_folder_name
-        all_rgb = self.get_all_subfolders(folder_path)
-        self.nr_of_img = len(all_rgb)
-        return all_rgb
+        all_files = self.get_all_subfolders(folder_path)
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.svg', '.heic', '.raw', '.cr2', '.nef', '.arw']
+        image_files = [file for file in all_files if any(file.lower().endswith(ext) for ext in image_extensions)]
+        self.nr_of_img = len(image_files)
+        return image_files
     
     def get_rgb_folder_path(self):
         return self.path_dataset + "/" + self.active_seq + "/" + self.img_folder_name

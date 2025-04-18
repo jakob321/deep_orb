@@ -305,51 +305,75 @@ class DepthModelWrapper:
 
         return depth_map, original_image
 
-    def process_images(self, paths, index=None):
+    def process_images(self, paths, caching=False):
         """
         Process a list of image paths and compute depth maps.
-
         Args:
             paths (list): List of image file paths
-
+            caching (bool): Whether to cache results
         Returns:
             tuple: (all_depth, all_orig) containing depth maps and original images
         """
         all_depth = []
         all_orig = []
-
-        for path in paths:
+        
+        # Create a unique identifier for this sequence
+        if caching:
+            # Extract sequence folder path for creating a unique cache directory
+            sequence_dir = os.path.dirname(paths[0])
+            sequence_name = os.path.basename(sequence_dir)
+            cache_base_dir = os.path.join("saved_values", sequence_name, self.model_name)
+            # Ensure the cache directory exists
+            os.makedirs(cache_base_dir, exist_ok=True)
+        
+        for i, path in enumerate(paths):
+            print(f"{i} / {len(paths)}")
+            
+            if caching:
+                # Create a unique cache filename for this specific frame
+                frame_name = os.path.basename(path).replace(".", "_")
+                cache_file = os.path.join(cache_base_dir, f"frame_{frame_name}")
+                
+                # Check if cached result exists
+                cached_data = generic_helper.load_data(cache_file, use_full_path=True)
+                if cached_data:
+                    print(f"Using cached result for frame {i}")
+                    depth, original_image = cached_data
+                    all_depth.append(depth)
+                    all_orig.append(original_image)
+                    continue
+            
             # Handle different models differently
             if self.model_name == "depth_pro":
+                print(path)
                 original_image = np.asarray(Image.open(path))
-                all_orig.append(original_image)
-
                 image, _, f_px = depth_pro.load_rgb(path)
                 image = self.transform(image).to(self.device)
                 prediction = self.run_inference_half(image, f_px, label="img")
-                depth = (
-                    prediction["depth"].cpu().numpy()
-                )  # Convert depth tensor to numpy array
+                depth = prediction["depth"].cpu().numpy()  # Convert depth tensor to numpy array
                 pred_focal_length = prediction["focallength_px"].cpu().numpy()
-
+            
             elif self.model_name == "depth_anything_v2":
                 # For depth_anything_v2, we use cv2 to read the image
                 original_image = cv2.imread(path)
-                all_orig.append(original_image)
-
                 # Use the infer_image method from depth_anything_v2
                 start_time = time.time()
                 depth = self.model.infer_image(original_image, self.input_size)
                 elapsed = time.time() - start_time
                 print(f"Inference time for depth_anything_v2: {elapsed:.3f} seconds")
-
+            
             elif self.model_name == "metric3d":
                 # Process with Metric3D model
                 depth, original_image = self.process_metric3d_image(path)
-                all_orig.append(original_image)
-
+            
+            all_orig.append(original_image)
             all_depth.append(depth)
-
+            
+            # Save this individual frame if caching is enabled
+            if caching:
+                print(cache_file)
+                generic_helper.save_data(cache_file, depth, original_image, use_full_path=True)
+        
         return all_depth, all_orig
 
     @staticmethod
@@ -385,7 +409,7 @@ class DepthModelWrapper:
         result = generic_helper.load_data(save_file_path)
 
         if result == False or override_run:
-            new_result = self.process_images(paths)
+            new_result = self.process_images(paths, caching=not override_run)
             generic_helper.save_data(save_file_path, *new_result)
             return new_result
 
@@ -393,18 +417,15 @@ class DepthModelWrapper:
 
 
 class DepthSim:
-    def __init__(self, model_name, inference_time, dataset):
-        dmw=DepthModelWrapper(model_name=model_name)
+    def __init__(self, model_name, inference_time):
+        self.dmw=DepthModelWrapper(model_name=model_name)
         self.inference_time = inference_time
-        frames = dataset.get_rgb_frame_path()
-        self.all_depth = dmw.run_with_caching(frames[0:int(len(frames)/10)])
-
-    def run_with_caching(self, paths, override_run=False):
-        return self.all_depth
 
     def process_images(self, paths, index=0):
-        time.sleep(self.inference_time)
-        return self.all_depth[index]
+        print("sim depth timer...")
+        time.sleep(self.inference_time) # This assumes the data is already cached
+        all_depth, all_orig = self.dmw.process_images(paths, caching=True)
+        return all_depth[index], all_orig[index]
 
 
 # Example usage:
