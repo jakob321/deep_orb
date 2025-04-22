@@ -23,6 +23,7 @@ class DepthModelWrapper:
         max_depth=20,
         checkpoint_path=None,
         metric3d_variant="vit_small",
+        load_weights=True
     ):
         """
         Initialize the depth model wrapper with the specified model.
@@ -39,14 +40,12 @@ class DepthModelWrapper:
         # Check device compatibility for all models
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
-        elif (
-            model_name in ["depth_anything_v2", "metric3d"]
-            and torch.backends.mps.is_available()
-        ):
-            self.device = torch.device("mps")
         else:
             self.device = torch.device("cpu")
         print("Using device:", self.device)
+
+        if not load_weights:
+            return
 
         # Initialize the appropriate model based on model_name
         if model_name == "depth_pro":
@@ -418,7 +417,7 @@ class DepthModelWrapper:
 
 class DepthSim:
     def __init__(self, model_name, inference_time):
-        self.dmw=DepthModelWrapper(model_name=model_name)
+        self.dmw=DepthModelWrapper(model_name=model_name, load_weights=False)
         self.inference_time = inference_time
 
     def process_images(self, paths, index=0):

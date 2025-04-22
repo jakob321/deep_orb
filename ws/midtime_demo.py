@@ -24,16 +24,17 @@ if True:
     pcd = o3d.geometry.PointCloud()
     vis.add_geometry(pcd)
 
-def orb_thread_function(settings_file, rgb_folder_path):
+def orb_thread_function(settings_file, rgb_folder_path, dataset):
     # This function will run in a separate thread
-    orb.run_orb_slam(settings_file, rgb_folder_path)
+    # orb.run_orb_slam(settings_file, rgb_folder_path)
+    orb.sim_run_orb_slam(dataset, rgb_folder_path, sim_delay=0.01)
 
 def add_depth(p_depth, pose, color_image,scale):
     global pcd, view_initialized
     pose[:3, 3] *= (scale/100)
-    # p_depth[p_depth>50]=0
+    p_depth[p_depth>50]=0
     # Create RGBD image
-    p_depth=p_depth*10
+    p_depth=p_depth/1
     rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
         o3d.geometry.Image(color_image), o3d.geometry.Image(p_depth), convert_rgb_to_intensity=False)
     
@@ -63,16 +64,16 @@ def add_depth(p_depth, pose, color_image,scale):
     vis.update_geometry(pcd)
     
     # Draw camera representation
-    cameraLines = o3d.geometry.LineSet.create_camera_visualization(
-        view_width_px=WIDTH,
-        view_height_px=HEIGHT,
-        intrinsic=intrinsic.intrinsic_matrix,
-        extrinsic=np.linalg.inv(pose),
-        scale=0.1
-    )
+    # cameraLines = o3d.geometry.LineSet.create_camera_visualization(
+    #     view_width_px=WIDTH,
+    #     view_height_px=HEIGHT,
+    #     intrinsic=intrinsic.intrinsic_matrix,
+    #     extrinsic=np.linalg.inv(pose),
+    #     scale=0.1
+    # )
 
-    # Add the camera lines to the visualizer
-    vis.add_geometry(cameraLines)
+    # # Add the camera lines to the visualizer
+    # vis.add_geometry(cameraLines)
     
     # Update visualization
     vis.poll_events()
@@ -120,21 +121,21 @@ def add_camera(pose_list,scale):
         view_height_px=HEIGHT,
         intrinsic=intrinsic.intrinsic_matrix,
         extrinsic=np.linalg.inv(pose),
-        scale=0.1
+        scale=0.001
     )
     vis.add_geometry(cameraLines) # Add the camera lines to the visualizer
     vc = vis.get_view_control()
     camera_params = vc.convert_to_pinhole_camera_parameters()
 
-    view_matrix = np.linalg.inv(view_pose).copy()
-    back_offset = 0.1  # Move backward
-    up_offset = 0.1    # Move upward
-    R = view_matrix[:3, :3]
-    forward = R @ np.array([0, 0, -1])  # Forward direction in world coordinates
-    up = R @ np.array([0, -1, 0])       # Up direction in world coordinates
-    view_matrix[:3, 3] += back_offset * forward + up_offset * up
+    # view_matrix = np.linalg.inv(view_pose).copy()
+    # back_offset = 0.1  # Move backward
+    # up_offset = 0.1    # Move upward
+    # R = view_matrix[:3, :3]
+    # forward = R @ np.array([0, 0, -1])  # Forward direction in world coordinates
+    # up = R @ np.array([0, -1, 0])       # Up direction in world coordinates
+    # view_matrix[:3, 3] += back_offset * forward + up_offset * up
     
-    camera_params.extrinsic = view_matrix
+    # camera_params.extrinsic = view_matrix
     vc.convert_from_pinhole_camera_parameters(camera_params)
     # vc.set_zoom(1)
 
@@ -166,12 +167,12 @@ def main():
     dataset = vkitti.dataset("midair", environment="spring")
     dataset.set_sequence(1)
     # depth = deep.DepthModelWrapper(model_name="depth_pro")
-    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.4)
+    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.3)
     
     # Start ORB-SLAM in a separate thread
     orb_thread = threading.Thread(
         target=orb_thread_function, 
-        args=(dataset.settings_file, dataset.get_rgb_folder_path())
+        args=(dataset.settings_file, dataset.get_rgb_folder_path(), dataset)
     )
 
     # Seperate thread for depth prediction
@@ -196,7 +197,7 @@ def main():
         current_poses = orb.get_current_pose_list()
         latest_pose = current_poses[-1]
         scale,_ = orb.compute_true_scale(current_poses, dataset.load_extrinsic_matrices())
-
+        scale =1
         # Check if new depth prediction is done, else only add camera pose
         if is_done:
             print("depth done :)))")

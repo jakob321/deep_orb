@@ -226,3 +226,35 @@ def compute_true_scale(slam_matrices: np.ndarray, gt_positions: np.ndarray):
     scaled_slam_matrices[:, :3, 3] *= scale_factor
     
     return scale_factor, scaled_slam_matrices
+
+# def sim_run_if_no_saved_values(dataset, override_run=False):
+#     settings_file = dataset.settings_file
+#     path_dataset = dataset.get_rgb_folder_path()
+#     result = generic_helper.load_data(path_dataset)
+#     if not result: # If there is no saved data
+#         new_result = run_orb_slam(settings_file, path_dataset)
+#         generic_helper.save_data(path_dataset, *new_result)
+#         return new_result
+#     return result
+
+def sim_run_orb_slam(dataset, path_dataset, sim_delay=0.1):
+    settings_file = dataset.settings_file
+    path_dataset = dataset.get_rgb_folder_path()
+    result = generic_helper.load_data(path_dataset)
+    if not result: # If there is no saved data
+        new_result = run_orb_slam(settings_file, path_dataset)
+        generic_helper.save_data(path_dataset, *new_result)
+        return new_result
+
+    # If there is saved data we simulate that it is updated live
+    pose_list, points_list, points_2d = result
+    global current_pose_list, current_points_list, current_points_2d, is_slam_running, final_result
+    for current_index in range(len(pose_list)-1500):
+        is_slam_running = True
+        time.sleep(sim_delay)
+        current_points_2d = points_2d[:current_index]
+        current_points_list = points_list[:current_index]
+        current_pose_list = pose_list[:current_index]
+    is_slam_running=False
+    final_result=result
+    return current_pose_list, current_points_list, current_points_2d
