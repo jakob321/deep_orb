@@ -165,51 +165,51 @@ def main():
     # Environment config
     dataset = vkitti.dataset("midair", environment="spring")
     dataset.set_sequence(1)
-    # depth = deep.DepthModelWrapper(model_name="depth_pro")
-    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.4)
-    
-    # Start ORB-SLAM in a separate thread
-    orb_thread = threading.Thread(
-        target=orb_thread_function, 
-        args=(dataset.settings_file, dataset.get_rgb_folder_path())
-    )
+    pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset)
+    dmw=deep.DepthModelWrapper(model_name="depth_pro", load_weights=False)
+    depth_paths = dataset.get_rgb_frame_path()
+    # all_depth, all_orig = dmw.process_images(deep_path, caching=True)
 
-    # Seperate thread for depth prediction
-    deep_thread = threading.Thread(
-        target=run_deep,
-        args=(dataset, depth)
-    )
+    # Draw camera representation
+    for index in range(len(depth_paths)):
+        pose = pose_list[index]
+        # print("------------")
+        # print(depth_paths[0])
+        # print(depth_paths[1])
+        # print(depth_paths[2])
+        # print(index)
+        # print(depth_paths[index])
+        # print("------------")
+        depth_path=[depth_paths[index]]
+        
+        # if index%100!=0 or index>100:continue
+        if index not in [50,60,70,80,90,100,110,120,130]: continue
+        cameraLines = o3d.geometry.LineSet.create_camera_visualization(
+            view_width_px=WIDTH,
+            view_height_px=HEIGHT,
+            intrinsic=intrinsic.intrinsic_matrix,
+            extrinsic=np.linalg.inv(pose),
+            scale=0.1
+        )
+        # print(depth_path)
+        scale=200
+        p_depth, color_image = dmw.process_images(depth_path, caching=True)
+        p_depth=p_depth[0]*scale
+        color_image=color_image[0]
+        p_depth[p_depth>50*scale]=0
+        print(np.median(p_depth))
+        rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
+            o3d.geometry.Image(color_image), 
+            o3d.geometry.Image(p_depth), 
+            convert_rgb_to_intensity=False)
+        new_points = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, intrinsic)
+        new_points.transform(pose)
+        vis.add_geometry(new_points)
+        vis.add_geometry(cameraLines) # Add the camera lines to the visualizer
 
-    orb_thread.start()
-    time.sleep(5) # Give ORB-SLAM a moment to initialize
-    deep_thread.start()
-    
-    # Process camera poses in the main thread
-    while orb.is_slam_thread_running():
-        if not orb.started() or not len(orb.get_current_pose_list()): 
-            continue # wait until we get our first value
-        # print("orb is running")
-        global is_done, latest_depth_prediction, latest_rgb_img, should_compute
-        should_compute = True # make sure depth predictions is done
 
-        # Retrieve new pose info
-        current_poses = orb.get_current_pose_list()
-        latest_pose = current_poses[-1]
-        scale,_ = orb.compute_true_scale(current_poses, dataset.load_extrinsic_matrices())
 
-        # Check if new depth prediction is done, else only add camera pose
-        if is_done:
-            print("depth done :)))")
-            add_depth(latest_depth_prediction, latest_pose, latest_rgb_img, scale)
-            is_done = False
-        else:
-            pass
-            add_camera(current_poses, scale)
-    should_compute = False
-    
-    # Wait for the ORB thread to complete
-    orb_thread.join()
-    deep_thread.join()
+
     vis.run()
     
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ def main():
     
     for seq in vkitti_seq:
         dataset.set_sequence(seq)
-        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
+        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
         
         # points_2d: [(u,v,depth),...frames]
         # points_list: [(3,n),...frames]
@@ -72,9 +72,9 @@ def main():
             
             # Filter out outliers
             inlier_mask = (depth_diff >= lower_bound) & (depth_diff <= upper_bound)
-            orb_u_filtered = orb_u[inlier_mask]
-            orb_v_filtered = orb_v[inlier_mask]
-            depth_diff_filtered = depth_diff[inlier_mask]
+            orb_u_filtered = orb_u#[inlier_mask]
+            orb_v_filtered = orb_v#[inlier_mask]
+            depth_diff_filtered = depth_diff#[inlier_mask]
             
             print(f"Removed {len(orb_u) - len(orb_u_filtered)} outliers out of {len(orb_u)} points")
             

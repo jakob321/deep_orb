@@ -115,11 +115,39 @@ class dataset:
         all_files = self.get_all_subfolders(folder_path)
         image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.svg', '.heic', '.raw', '.cr2', '.nef', '.arw']
         image_files = [file for file in all_files if any(file.lower().endswith(ext) for ext in image_extensions)]
+        
+        # Sort files based on the numeric part in the filename
+        def extract_number(filename):
+            # Extract numbers from the filename using regex
+            numbers = re.findall(r'\d+', filename)
+            # Return the last number found or 0 if no numbers
+            return int(numbers[-1]) if numbers else 0
+        
+        image_files.sort(key=extract_number)
+        
         self.nr_of_img = len(image_files)
         return image_files
-    
+
     def get_rgb_folder_path(self):
         return self.path_dataset + "/" + self.active_seq + "/" + self.img_folder_name
+
+    def get_rgb_frame(self, frame_index=0):
+        image_paths = self.get_rgb_frame_path()
+        
+        # Check if the requested frame index is valid
+        if frame_index < 0 or frame_index >= len(image_paths):
+            raise IndexError(f"Frame index {frame_index} is out of range. Valid range is 0-{len(image_paths)-1}")
+        
+        img_path = image_paths[frame_index]
+        img = cv2.imread(img_path)
+        
+        # Convert from BGR to RGB (OpenCV loads as BGR by default)
+        if img is not None:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        else:
+            raise IOError(f"Failed to read image at path: {img_path}")
+        
+        return img
 
     def get_all_seq(self):
         """Gets all subfolder names and sorts them based on the numbers in the name."""
