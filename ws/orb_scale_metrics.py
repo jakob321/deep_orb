@@ -9,7 +9,7 @@ def main():
     # We use the dataset vkitti and midair for testing. The sequences have been choosen for ORB to not lose tracking
     # dataset = vkitti.dataset("vkitti2")
     # dataset = vkitti.dataset("vkitti2")
-    dataset = vkitti.dataset("midair", environment="winter")
+    dataset = vkitti.dataset("midair", environment="fall")
     print(dataset.get_all_seq())
     vkitti_seq=[1]
     depth = deep.DepthModelWrapper(model_name="depth_pro")
@@ -19,7 +19,7 @@ def main():
     # vkitti_seq=[4]
     for seq in vkitti_seq:
         dataset.set_sequence(seq)
-        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
+        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
         number_of_deep_frames = 10
         deep_frames_index = np.linspace(1, len(points_2d)-1, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]

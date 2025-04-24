@@ -34,7 +34,8 @@ def run_orb_slam(settings_file, path_dataset):
     def update_data():
         global current_pose_list, current_points_list, current_points_2d, is_slam_running
         while slam_thread.is_alive():
-            poses, points = orbslam3.get_all_data_np()
+            poses = orbslam3.get_camera_poses_np()
+            points = orbslam3.get_3d_points_np()
             points_2d = orbslam3.get_2d_points()
             
             # Update the global variables

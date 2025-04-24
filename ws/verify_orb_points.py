@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 def main():
     dataset = vkitti.dataset("midair", environment="fall")
     dataset.set_sequence(1)
-    pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
+    pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
     
     # Create a window for visualization
     cv2.namedWindow("SLAM Keypoints Visualization", cv2.WINDOW_NORMAL)
