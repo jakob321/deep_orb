@@ -335,7 +335,7 @@ class DepthModelWrapper:
                 
                 # Check if cached result exists
                 cached_data = generic_helper.load_data(cache_file, use_full_path=True)
-                print(cached_data)
+                # print(cached_data)
                 if cached_data:
                     print(f"Using cached result for frame {i}")
                     depth, original_image = cached_data

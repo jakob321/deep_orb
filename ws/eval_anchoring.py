@@ -19,7 +19,7 @@ def main():
     
     for seq in vkitti_seq:
         dataset.set_sequence(seq)
-        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
+        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
         
         # points_2d: [(u,v,depth),...frames]
         # points_list: [(3,n),...frames]
