@@ -38,24 +38,10 @@ def run_orb_slam(settings_file, path_dataset):
             points = orbslam3.get_3d_points_np()
             points_2d = orbslam3.get_2d_points()
 
-
-            
             # Update the global variables
             current_pose_list = poses.transpose(2, 0, 1) if poses is not None else None
             current_points_list = points
-            current_points_2d = points_2d[0] if points_2d is not None else None
-
-            # print(current_points_2d)
-            try:
-                print(current_points_2d[-1].shape)
-                # print(current_points_2d[-1][2])
-                if np.all(current_points_2d[-1][2]==-1.0):
-                    print("sad")
-                else:
-                    print("happy")
-            except:
-                pass
-            
+            current_points_2d = points_2d[0] if points_2d is not None else None            
             time.sleep(0.01)
         is_slam_running = False
     

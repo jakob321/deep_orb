@@ -97,7 +97,7 @@ def main():
     dataset.set_sequence(seq)
 
     depth = deep.DepthModelWrapper(model_name="depth_pro", load_weights=False)
-    pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
+    pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
     orb_true_scale, pose_list = orb.compute_true_scale(pose_list, dataset.load_extrinsic_matrices())
     print(orb_true_scale)
     

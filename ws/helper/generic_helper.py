@@ -1,5 +1,7 @@
 import pickle
 import os
+import cv2
+import numpy as np
 
 def save_data(file_name, *objects, path="", use_full_path=False):
     """
@@ -64,3 +66,71 @@ def load_data(file_name, use_full_path=False):
     except (pickle.UnpicklingError, EOFError, Exception) as e:  # Handle corrupted files
         print(f"No file to load or corrupted file: {e}")
         return False
+
+
+def get_sharp_gradients_mask(depth_map, threshold=0.5):
+    if depth_map.max() > 1.0:
+        normalized_depth = depth_map / depth_map.max()
+    else:
+        normalized_depth = depth_map.copy()
+    
+    # Calculate gradients in x and y directions using Sobel
+    grad_x = cv2.Sobel(normalized_depth, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(normalized_depth, cv2.CV_64F, 0, 1, ksize=3)
+    
+    # Calculate gradient magnitude
+    gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    
+    # Create a mask where gradient is below threshold (not sharp)
+    mask = gradient_magnitude < threshold
+    mask_uint8 = mask.astype(np.uint8)
+    kernel = np.ones((5, 5), np.uint8)
+    #dilated_mask = ~cv2.dilate(~mask_uint8, kernel, iterations=1)
+    return ~(mask_uint8 > 0)
+
+
+def get_sky_mask(rgb_image):
+    # Normalize image to 0-1 range (with clearer comment)
+    normalized_rgb = rgb_image / 255.0
+    
+    # Convert to grayscale for gradient detection
+    grayscale = cv2.cvtColor(np.float32(normalized_rgb), cv2.COLOR_RGB2GRAY)
+    
+    # Calculate gradient magnitude directly (combine x and y steps)
+    grad_x = cv2.Sobel(grayscale, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(grayscale, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+    
+    # Create initial mask where gradient is below threshold (smooth areas like sky)
+    threshold = 0.1
+    smooth_mask = gradient_magnitude < threshold
+    
+    # Convert to uint8 for OpenCV operations
+    mask_uint8 = smooth_mask.astype(np.uint8) * 255
+    
+    # Define kernels once with descriptive names
+    small_kernel = np.ones((5, 5), np.uint8)
+    large_kernel = np.ones((15, 15), np.uint8)
+    
+    # Process mask with morphological operations
+    # First dilate the inverse mask (non-sky areas)
+    expanded_non_sky = cv2.dilate(~mask_uint8, small_kernel, iterations=3)
+    # Then dilate the inverse again to get final sky mask
+    final_mask = cv2.dilate(~expanded_non_sky, large_kernel, iterations=2)
+    
+    # Return boolean mask
+    return final_mask > 0
+
+def scale_predicted_depth(p_depth, orb_points_2d):
+    orb_u = orb_points_2d[0].astype(int)
+    orb_v = orb_points_2d[1].astype(int)
+    orb_depths = orb_points_2d[2]
+
+    # We erode so that the ORB points hit correct surface with greater chance
+    p_depth_eroded = cv2.erode(p_depth, np.ones((5, 5), np.uint8))    
+    depth_at_orb_points = p_depth_eroded[orb_v, orb_u]
+    scale_ratios = orb_depths / depth_at_orb_points
+    median_scale = np.median(scale_ratios)
+
+    return p_depth * median_scale
+
