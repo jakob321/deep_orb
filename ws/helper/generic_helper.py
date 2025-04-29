@@ -2,6 +2,8 @@ import pickle
 import os
 import cv2
 import numpy as np
+from scipy.interpolate import Rbf
+import cv2
 
 def save_data(file_name, *objects, path="", use_full_path=False):
     """
@@ -133,4 +135,102 @@ def scale_predicted_depth(p_depth, orb_points_2d):
     median_scale = np.median(scale_ratios)
 
     return p_depth * median_scale
+
+def create_correction_map(p_depth, orb_points_2d, rgb_image):
+    # Extract ORB coords & depths
+    orb_u = orb_points_2d[0].astype(int)
+    orb_v = orb_points_2d[1].astype(int)
+    orb_depths = orb_points_2d[2]
+    height, width = p_depth.shape
+
+    # Robustify sensor depth
+    p_depth_eroded = cv2.erode(p_depth, np.ones((5, 5), np.uint8))
+    depth_at_orb = p_depth_eroded[orb_v, orb_u]
+
+    # Compute residuals
+    depth_diff = orb_depths - depth_at_orb
+
+    # Sky mask & filter
+    sky_mask = get_sky_mask(rgb_image)
+    valid_u, valid_v, valid_diffs = [], [], []
+    for u, v, d in zip(orb_u, orb_v, depth_diff):
+        if (0 <= v < height and 0 <= u < width
+            and not sky_mask[v, u]
+            and abs(d) <= 10.0):
+            valid_u.append(u)
+            valid_v.append(v)
+            valid_diffs.append(d)
+
+    if not valid_u:
+        return np.zeros_like(p_depth), np.zeros_like(p_depth)
+
+    valid_u = np.array(valid_u)
+    valid_v = np.array(valid_v)
+    valid_diffs = np.array(valid_diffs)
+
+    # 1) Linear RBF on a coarse grid, then upsample to full resolution
+    rbf = Rbf(valid_u, valid_v, valid_diffs, function='linear', smooth=1.0)
+
+    # Downscale factor
+    downscale = 4
+    coarse_h = max(2, height // downscale)
+    coarse_w = max(2, width  // downscale)
+
+    # Create coarse-grid coordinates in original pixel space
+    coarse_x = np.linspace(0, width - 1, coarse_w)
+    coarse_y = np.linspace(0, height - 1, coarse_h)
+    cx, cy   = np.meshgrid(coarse_x, coarse_y)
+
+    # Evaluate RBF on the small grid
+    coarse_corr = rbf(cx, cy)
+
+    # Upsample back to full resolution
+    # Note: cv2.resize takes (width, height)
+    global_correction = cv2.resize(
+        coarse_corr.astype(np.float32),
+        (width, height),
+        interpolation=cv2.INTER_CUBIC
+    )
+
+    # 2) Build a confidence mask of Gaussians via union (local-windowed)
+    influence_radius = 70.0
+    sigma = influence_radius
+    radius = int(3 * sigma)
+
+    # Precompute Gaussian kernel patch
+    ax = np.arange(-radius, radius+1)
+    xx, yy = np.meshgrid(ax, ax)
+    kernel = np.exp(-(xx**2 + yy**2) / (2 * sigma * sigma))
+
+    mask = np.zeros_like(global_correction, dtype=float)
+    grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
+
+    for u, v in zip(valid_u, valid_v):
+        # Window bounds
+        x0 = max(u - radius, 0)
+        x1 = min(u + radius + 1, width)
+        y0 = max(v - radius, 0)
+        y1 = min(v + radius + 1, height)
+
+        # Kernel slice
+        kx0 = x0 - (u - radius)
+        kx1 = kx0 + (x1 - x0)
+        ky0 = y0 - (v - radius)
+        ky1 = ky0 + (y1 - y0)
+
+        sub = mask[y0:y1, x0:x1]
+        gsub = kernel[ky0:ky1, kx0:kx1]
+        mask[y0:y1, x0:x1] = 1 - (1 - sub) * (1 - gsub)
+
+    # 3) Localize the correction
+    weighted_correction = global_correction * mask
+
+    # 4) Apply it
+    corrected_map = p_depth + weighted_correction
+
+    # Cast corrected_map to the same dtype as p_depth
+    corrected_map = corrected_map.astype(p_depth.dtype)
+
+    return corrected_map
+
 
