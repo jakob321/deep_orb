@@ -67,7 +67,7 @@ def main():
     depth_paths = dataset.get_rgb_frame_path()
 
     for index in range(len(depth_paths)):
-        if index % 30 != 0 or index > 2000 or index < 10:
+        if index % 30 != 0 or index > 500 or index < 10:
             continue
         # if index not in [10]: continue
 
@@ -84,7 +84,8 @@ def main():
         orb_points_2d = points_2d[index]  # 2D points with depth (u, v, depth)
         orb_points_2d[2] = orb_points_2d[2] * orb_true_scale
         p_depth = generic_helper.scale_predicted_depth(p_depth, orb_points_2d)
-        p_depth = generic_helper.create_correction_map(p_depth, orb_points_2d, color_image)
+        # p_depth = generic_helper.create_correction_map(p_depth, orb_points_2d, color_image)
+        # p_depth = generic_helper.compute_knn_region_map(p_depth, orb_points_2d, fx, fy, cx, cy)
         p_depth[p_depth > 30] = 0 # remove points farther than x meters
         p_depth[generic_helper.get_sharp_gradients_mask(p_depth, threshold=0.3)] = 0
         p_depth[generic_helper.get_sky_mask(color_image)] = 0
@@ -109,6 +110,7 @@ def main():
         vis.add_geometry(new_points) # Add projected depth image to visualizer
         vis.add_geometry(cameraLines)  # Add the camera lines to the visualizer
 
+    print("before vis run")
     vis.run()
 
 

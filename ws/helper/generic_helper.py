@@ -233,4 +233,60 @@ def create_correction_map(p_depth, orb_points_2d, rgb_image):
 
     return corrected_map
 
+def backproject(depth, fx, fy, cx, cy):
+    """Turn an H×W depth map into an (H*W)×3 array of 3D points."""
+    H, W = depth.shape
+    u = np.arange(W)
+    v = np.arange(H)
+    uu, vv = np.meshgrid(u, v)
+    z = depth.ravel()
+    x = (uu.ravel() - cx) * z / fx
+    y = (vv.ravel() - cy) * z / fy
+    return np.vstack((x, y, z)).T  # shape (N,3)
 
+import numpy as np
+from sklearn.neighbors import NearestNeighbors
+import open3d as o3d
+from scipy.spatial import KDTree
+def compute_knn_region_map(dense_depth, orb_points_2d, fx, fy, cx, cy):
+    """
+    Returns an H×W integer array, where each pixel is labelled by the index (0...M-1)
+    of the nearest sparse point in 3D.
+    """
+    sparse_uv = orb_points_2d[0].astype(int)
+    sparse_v = orb_points_2d[1].astype(int)
+    sparse_z = orb_points_2d[2]
+    H, W = dense_depth.shape
+    # 1) back-project
+    P_d = backproject(dense_depth, fx, fy, cx, cy)         # (N,3), N=H*W
+    P_s = backproject(sparse_z.reshape(-1,1), fx, fy, cx, cy)  # wrong shape: need uv to z
+    # Actually build P_s correctly:
+    # sparse_uv, sparse_v, sparse_z are 1D arrays of length M
+    xs = (sparse_uv - cx) * sparse_z / fx
+    ys = (sparse_v  - cy) * sparse_z / fy
+    zs = sparse_z
+    P_s = np.vstack((xs, ys, zs)).T                       # (M,3)
+
+    # 2) KD-tree on sparse
+    kd = KDTree(P_s)
+
+    # 3) query nearest neighbor
+    _, idx = kd.query(P_d, k=1)  # idx.shape = (N,1)
+
+    # reshape to H×W
+    region_map = idx.reshape(H, W)
+        # 4) compute per‐region scale factors
+    #    at each sparse pt j, look up the corresponding dense depth:
+    dense_at_sparse = dense_depth[sparse_v, sparse_uv]   # shape (M,)
+    scale_per_region = (sparse_z / dense_at_sparse)      # shape (M,)
+    # scale_per_region = dense_at_sparse /sparse_z
+    print(scale_per_region)
+
+    # 5) build full‐image scale map by broadcasting:
+    scale_map = scale_per_region[region_map]            # H×W
+
+    # 6) apply to dense map
+    fused_depth = dense_depth * scale_map
+
+    return fused_depth
+    # return region_map, percent_map
