@@ -290,3 +290,101 @@ def compute_knn_region_map(dense_depth, orb_points_2d, fx, fy, cx, cy):
 
     return fused_depth
     # return region_map, percent_map
+
+import numpy as np
+import cv2
+from sklearn.cluster import KMeans
+
+def compute_kmeans_with_sparse_correction(
+    dense_depth, fx, fy, cx, cy,
+    orb_points_2d,
+    n_clusters=50, depth_weight=1.0,
+    scale_factor=0.25,
+    downsample_interp=cv2.INTER_LINEAR,
+    upsample_interp=cv2.INTER_LINEAR
+):
+    """
+    Like compute_kmeans_with_sparse_correction, but first shrinks the depth map 
+    (and intrinsics / ORB points) by `scale_factor`, does all work at low 
+    resolution, then scales the resulting correction_map back up.
+    
+    Parameters
+    ----------
+    dense_depth : (H, W) float array
+        Original high-res depth.
+    fx, fy, cx, cy : floats
+        Original intrinsics.
+    orb_points_2d : (3, N) array
+        [u, v, z] of sparse points in original image coords.
+    scale_factor : float in (0,1]
+        Downsampling factor for width & height.
+    downsample_interp, upsample_interp : OpenCV interpolation flags
+        e.g. cv2.INTER_LINEAR or cv2.INTER_NEAREST.
+        
+    Returns
+    -------
+    output : (H, W) float array
+        dense_depth corrected by per-pixel scale factors.
+    """
+    # Original size
+    H, W = dense_depth.shape
+    # Downsample size
+    Hs, Ws = int(H * scale_factor), int(W * scale_factor)
+    # 1) shrink depth
+    dense_small = cv2.resize(dense_depth, (Ws, Hs), interpolation=downsample_interp)
+    # 2) adjust intrinsics
+    fx_s, fy_s = fx * scale_factor, fy * scale_factor
+    cx_s, cy_s = cx * scale_factor, cy * scale_factor
+    # 3) scale sparse points
+    u, v, z = orb_points_2d
+    sparse_u_s = np.clip((u * scale_factor).astype(int), 0, Ws - 1)
+    sparse_v_s = np.clip((v * scale_factor).astype(int), 0, Hs - 1)
+    sparse_z   = z
+
+    # ---- now run exactly the same pipeline on the small image ----
+    # back-project to 3D
+    uu, vv = np.meshgrid(np.arange(Ws), np.arange(Hs))
+    z_flat = dense_small.ravel()
+    x = (uu.ravel() - cx_s) * z_flat / fx_s
+    y = (vv.ravel() - cy_s) * z_flat / fy_s
+    P = np.vstack((x, y, z_flat)).T
+    if depth_weight != 1.0:
+        P *= np.array([1.0, 1.0, depth_weight])[None, :]
+
+    # k-means on small 3D cloud
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(P)
+    labels_small = kmeans.labels_.reshape(Hs, Ws)
+
+    # assign sparse points → clusters
+    sparse_labels = labels_small[sparse_v_s, sparse_u_s]
+    dense_at_sparse = dense_small[sparse_v_s, sparse_u_s]
+    point_ratios = sparse_z / dense_at_sparse
+
+    # median ratio per cluster
+    scales = np.ones(n_clusters, dtype=float)
+    has_sparse = np.zeros(n_clusters, dtype=bool)
+    for c in range(n_clusters):
+        mask = (sparse_labels == c)
+        if not np.any(mask):
+            continue
+        has_sparse[c] = True
+        scales[c] = np.median(point_ratios[mask])
+
+    # fill empty via nearest‐neighbor in cluster‐center space
+    centers = kmeans.cluster_centers_
+    for c in range(n_clusters):
+        if has_sparse[c]:
+            continue
+        valid = np.where(has_sparse)[0]
+        dists = np.linalg.norm(centers[valid] - centers[c], axis=1)
+        scales[c] = scales[valid[np.argmin(dists)]]
+
+    # build small correction map
+    correction_small = scales[labels_small]  # shape (Hs, Ws)
+
+    # 4) upsample correction map back to (H, W)
+    correction = cv2.resize(correction_small, (W, H), interpolation=upsample_interp)
+
+    # 5) apply
+    output = dense_depth * correction
+    return output

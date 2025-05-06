@@ -67,7 +67,7 @@ def main():
     depth_paths = dataset.get_rgb_frame_path()
 
     for index in range(len(depth_paths)):
-        if index % 30 != 0 or index > 500 or index < 10:
+        if index % 30 != 0 or index > 2000 or index < 10:
             continue
         # if index not in [10]: continue
 
@@ -86,7 +86,15 @@ def main():
         p_depth = generic_helper.scale_predicted_depth(p_depth, orb_points_2d)
         # p_depth = generic_helper.create_correction_map(p_depth, orb_points_2d, color_image)
         # p_depth = generic_helper.compute_knn_region_map(p_depth, orb_points_2d, fx, fy, cx, cy)
-        p_depth[p_depth > 30] = 0 # remove points farther than x meters
+        p_depth = generic_helper.compute_kmeans_with_sparse_correction(
+            cv2.erode(p_depth, np.ones((5, 5), np.uint8)), fx, fy, cx, cy,
+            orb_points_2d,
+            n_clusters=25,
+            depth_weight=0.8
+        )
+        print(p_depth.dtype)
+        p_depth = np.asarray(p_depth, dtype=np.float32).copy()
+        p_depth[p_depth > 40] = 0 # remove points farther than x meters
         p_depth[generic_helper.get_sharp_gradients_mask(p_depth, threshold=0.3)] = 0
         p_depth[generic_helper.get_sky_mask(color_image)] = 0
 
