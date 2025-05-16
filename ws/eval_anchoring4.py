@@ -271,13 +271,14 @@ def smooth_correction_map_3d(correction_map, dense_depth, fx, fy, cx, cy,
 import cv2, cv2.ximgproc as xip
 
 def main():
-    dataset = vkitti.dataset("midair", environment="spring")
-    seq = 1
+    dataset = vkitti.dataset("midair", environment="winter")
+    seq = 11
     dataset.set_sequence(seq)
 
     depth = deep.DepthModelWrapper(model_name="depth_pro", load_weights=False)
+    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
     pose_list, points_list, points_2d = orb.run_if_no_saved_values(
-        dataset, override_run=False
+        dataset, override_run=True
     )
     orb_true_scale, pose_list = orb.compute_true_scale(
         pose_list, dataset.load_extrinsic_matrices()
@@ -321,11 +322,6 @@ def main():
             depth_weight=0.8
         )
 
-        # correction_map=smooth_correction_map_3d(correction_map, p_depth, fx, fy, cx, cy,
-        #                      sigma=0.05, k=25)
-        
-        # correction_map = xip.jointBilateralFilter(guide=p_depth, src=correction_map, d=-1)
-
         corr_depth = p_depth * correction_map
 
         # Evaluate results
@@ -333,75 +329,75 @@ def main():
         depth_diff_percentage = np.abs(t_depth - p_depth) / (t_depth + 1e-6) * 100
 
         # Plot results
-        plt.figure(figsize=(14, 10))
+        plt.figure(figsize=(10, 10))
 
-        plt.subplot(2, 3, 1)
+        plt.subplot(2, 2, 1)
         plt.imshow(depth_diff_percentage, cmap="hot", vmin=0, vmax=100)
         cbar = plt.colorbar(label="Difference (%)", fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
-        plt.title("Original Depth Difference")
+        plt.title("Original")
         plt.axis("off")
 
-        plt.subplot(2, 3, 2)
+        plt.subplot(2, 2, 2)
         plt.imshow(corr_depth_percentage, cmap="hot", vmin=0, vmax=100)
         cbar = plt.colorbar(label="Difference (%)", fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
-        plt.title("Adjusted Depth Difference")
+        plt.title("Adjusted")
         plt.axis("off")
 
-        plt.subplot(2, 3, 3)
+        plt.subplot(2, 2, 3)
         plt.imshow(precent_map, cmap="viridis")
         cbar = plt.colorbar(label="Correction", fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
-        plt.title("Weighted Correction Map")
+        plt.title("k-nearest neighbor selected regions")
         plt.axis("off")
 
-        plt.subplot(2, 3, 4)
-        plt.imshow(correction_map, cmap="inferno")
-        cbar = plt.colorbar(label="Confidence", fraction=0.046, pad=0.04)
+        plt.subplot(2, 2, 4)
+        plt.imshow(correction_map, cmap="viridis")
+        cbar = plt.colorbar(label="Multiplier", fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
-        plt.title("Confidence Map")
+        plt.title("Adjustment map")
         plt.axis("off")
 
-        plt.subplot(2, 3, 5)
-        plt.imshow(t_depth, cmap="hot", vmin=0, vmax=100)
-        cbar = plt.colorbar(label="Depth (m)", fraction=0.046, pad=0.04)
-        cbar.ax.tick_params(labelsize=8)
-        plt.title("True Depth")
-        plt.axis("off")
+        # plt.subplot(2, 3, 5)
+        # plt.imshow(t_depth, cmap="viridis", vmin=0, vmax=100)
+        # cbar = plt.colorbar(label="Depth (m)", fraction=0.046, pad=0.04)
+        # cbar.ax.tick_params(labelsize=8)
+        # plt.title("True Depth")
+        # plt.axis("off")
 
-        plt.subplot(2, 3, 6)
-        plt.imshow(rgb_img[index])
-        # print(orb_depths)
+        # plt.subplot(2, 3, 6)
+        # plt.imshow(rgb_img[index])
+        # # print(orb_depths)
 
-        # Create scatter plot with a colormap and store the scatter object
-        orb_u = orb_points_2d[0].astype(int)
-        orb_v = orb_points_2d[1].astype(int)
-        orb_depths = orb_points_2d[2]
-        p_depth_eroded = cv2.erode(p_depth, np.ones((5, 5), np.uint8))
-        # t_depth_erode = cv2.erode(t_depth, np.ones((5, 5), np.uint8))
-        depth_at_orb_points = p_depth_eroded[orb_v, orb_u]
-        # depth_at_orb_points = p_depth[orb_v, orb_u]
-        depth_diff = (orb_depths / depth_at_orb_points)*100-100
-        scatter = plt.scatter(
-            orb_u, orb_v, c=depth_diff, cmap="viridis", s=40, alpha=0.8, vmin=-40
-        )
+        # # Create scatter plot with a colormap and store the scatter object
+        # orb_u = orb_points_2d[0].astype(int)
+        # orb_v = orb_points_2d[1].astype(int)
+        # orb_depths = orb_points_2d[2]
+        # p_depth_eroded = cv2.erode(p_depth, np.ones((5, 5), np.uint8))
+        # # t_depth_erode = cv2.erode(t_depth, np.ones((5, 5), np.uint8))
+        # depth_at_orb_points = p_depth_eroded[orb_v, orb_u]
+        # # depth_at_orb_points = p_depth[orb_v, orb_u]
+        # depth_diff = (orb_depths / depth_at_orb_points)*100-100
+        # scatter = plt.scatter(
+        #     orb_u, orb_v, c=depth_diff, cmap="viridis", s=40, alpha=0.8, vmin=-40
+        # )
 
-        # annotate each point with its depth value
-        for x, y, d in zip(orb_u, orb_v, depth_diff):
-            plt.text(
-                x, y,                   # position
-                f"{d:.1f}",             # label (1 decimal place)
-                fontsize=15,             # adjust to taste
-                ha="center", va="bottom",  # centered horizontally, above the point
-                color="black"           # ensure readability
-            )
+        # # annotate each point with its depth value
+        # for x, y, d in zip(orb_u, orb_v, depth_diff):
+        #     plt.text(
+        #         x, y,                   # position
+        #         f"{d:.1f}",             # label (1 decimal place)
+        #         fontsize=15,             # adjust to taste
+        #         ha="center", va="bottom",  # centered horizontally, above the point
+        #         color="black"           # ensure readability
+        #     )
 
-        # Add a colorbar to show depth values
-        cbar = plt.colorbar(scatter, label="Depth (m)")
+        # # Add a colorbar to show depth values
+        # cbar = plt.colorbar(scatter, label="Depth (m)")
 
-        plt.title("ORB Points (After Outlier Removal)")
-        plt.axis("off")
+        # plt.title("ORB Points (After Outlier Removal)")
+        # plt.axis("off")
 
         plt.tight_layout()
         plt.show()

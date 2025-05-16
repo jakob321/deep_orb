@@ -32,7 +32,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
     
     if errors2 is None:
         min_val = errors1_flat.min()
-        max_val = errors1_flat.max()
+        max_val = 100#errors1_flat.max()
         if log_scale_x:
             bins = np.logspace(np.log10(min_val + epsilon), np.log10(max_val + epsilon), num_bins)
         else:
@@ -42,7 +42,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
         errors2_flat = errors2.ravel()
         # errors2_flat = errors2_flat[errors2_flat > 0]
         min_val = np.minimum(errors1_flat.min(), errors2_flat.min())
-        max_val = np.maximum(errors1_flat.max(), errors2_flat.max())
+        max_val = 100#np.maximum(errors1_flat.max(), errors2_flat.max())
         if log_scale_x:
             bins = np.logspace(np.log10(min_val + epsilon), np.log10(max_val + epsilon), num_bins)
         else:
@@ -52,7 +52,7 @@ def prepare_histogram_bins(errors1, errors2=None, num_bins=50, epsilon=1e-8, log
 def plot_error_histograms(errors1, errors2=None, num_bins=50, epsilon=1e-8,
                           label1="Error 1", label2="Error 2", x_ax_label=" ",
                           ground_truth_line=None, pred_line=None,
-                          log_scale_x=True):
+                          log_scale_x=True, title="no title"):
     """
     Plot one or two histograms of error values with optional vertical reference lines.
 
@@ -76,6 +76,17 @@ def plot_error_histograms(errors1, errors2=None, num_bins=50, epsilon=1e-8,
         plt.hist(errors2_flat, bins=bins, density=True, alpha=0.5,
                  label=label2, color='red', edgecolor='black')
 
+    # Filter values between -50 and 50
+    filtered_errors = errors1_flat[(errors1_flat >= -50) & (errors1_flat <= 50)]
+
+    # Compute the median of the filtered values
+    # median_filtered = np.median(filtered_errors)
+
+    # # Plot a vertical line at the median
+    # plt.axvline(median_filtered, color='blue', linestyle='--', linewidth=1, label=f'Median ({median_filtered:.3f}%)')
+
+
+
     # Add ground truth and predicted lines with annotations
     if ground_truth_line is not None:
         plt.axvline(ground_truth_line, color='red', linestyle='-', label=f'Ground Truth ({ground_truth_line:.3f})')
@@ -92,7 +103,7 @@ def plot_error_histograms(errors1, errors2=None, num_bins=50, epsilon=1e-8,
 
     plt.xlabel(x_ax_label + (" [log scale]" if log_scale_x else ""))
     plt.ylabel("Normalized Frequency")
-    plt.title("Comparison of Depth Absolute Errors")
+    plt.title(title)
     plt.legend()
     plt.grid(True, which="both", ls="--")
     plt.tight_layout()

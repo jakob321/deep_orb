@@ -43,6 +43,7 @@ services:
       - ./ws/:/root/deep_orb/ws/
       - /tmp/.X11-unix:/tmp/.X11-unix  # Mount X11 socket
       - ${HOME}/.Xauthority:/root/.Xauthority  # Share Xauthority file
+      - /home/jakob/thesis_paper/fig:/root/fig:rw
     privileged: true
     network_mode: host  # Required for X11 forwarding
     ipc: host

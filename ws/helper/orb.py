@@ -23,7 +23,7 @@ def run_orb_slam(settings_file, path_dataset):
     
     def run_slam():
         global final_result
-        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=120)
+        final_result = orbslam3.run_orb_slam3(voc_file, settings_file, path_dataset, fps=20)
     
     # Start the SLAM thread
     slam_thread = threading.Thread(target=run_slam)
@@ -146,7 +146,31 @@ def predict_orb_scale(scales):
     # Recompute the scale using the median of inliers
     scaling_factor = np.median(scales[inliers])
     
-    return scaling_factor
+    return scaling_factor * 1.5
+
+
+# import numpy as np
+# from sklearn.cluster import KMeans
+
+# def predict_orb_scale(scales, pct=80):
+#     scales = np.asarray(scales)
+#     # compute an upper cutoff at the pct-th percentile
+#     upper = np.percentile(scales, pct)
+#     filt = scales[scales <= upper]
+#     # if too few left, just fall back to median
+#     if len(filt) < 2:
+#         return float(np.median(scales) * 1.25)
+
+#     # cluster on the inliers only
+#     data = filt.reshape(-1, 1)
+#     km = KMeans(n_clusters=2, random_state=0).fit(data)
+#     centers = km.cluster_centers_.ravel()
+#     print("centers")
+#     print(centers)
+
+#     # pick the larger (but it's now at most your pct cutoff)
+#     return float(max(centers) * 1.25)
+
 
 def all_scales(orb_points_list, deep_points_list):
     """

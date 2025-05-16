@@ -9,26 +9,26 @@ from helper import generic_helper
 
 
 def main():
-    env="fall"
-    env="spring"
-    dataset = vkitti.dataset("midair", environment=env)
-    vkitti_seq = [0]#sprin 1,7
-    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
     depth = deep.DepthModelWrapper(model_name="depth_pro", load_weights=False)
-    # depth = deep.DepthModelWrapper(model_name="metric3d")
+    all_seq = [1,2,8,11,12,13,14,15,21,23]
+    seq_fall = [1,2,8,11,12]
+    all_predictions = []
+    all_predictions2 = []
     
-    for seq in vkitti_seq:
+    for seq in all_seq:
+        active_env="spring"
+        if seq in seq_fall:
+            active_env="fall"
+        dataset = vkitti.dataset("midair", environment=active_env)
         dataset.set_sequence(seq)
+
         number_of_deep_frames = 10
         deep_frames_index = np.linspace(0, len(dataset.get_rgb_frame_path())-2, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]
-        # pred_depth, rgb_img, all_focal = depth.process_images(rgb_path, caching=False)
         pred_depth, rgb_img = depth.process_images(rgb_path, caching=True)
         
         # Initialize empty list to collect all depth difference percentages
-        all_predictions = []
-        all_predictions2 = []
-        all_scale = []
+
         print(deep_frames_index)
         for i, frame in enumerate(deep_frames_index):
             print("nr of iter :::()")
@@ -52,7 +52,8 @@ def main():
             depth_diff_percentage[depth_diff_percentage>200] = 200
             valid_mask = ~sky_mask
 
-            depth_diff_percentage2 = depth_diff_percentage[valid_mask]
+            depth_diff_percentage2 = depth_diff_percentage#[valid_mask]
+            depth_diff_percentage = depth_diff_percentage[valid_mask]
             # all_scale.append(depth_diff_percentage)
 
             # plt.imshow(depth_diff_percentage, cmap='hot', vmin=-50, vmax=50)
@@ -63,26 +64,27 @@ def main():
             # plt.show()
             
             # Flatten the 2D depth_diff_percentage array and add all values to all_predictions
-            all_predictions.append(depth_diff_percentage2.flatten())
+            all_predictions.append(depth_diff_percentage.flatten())
             # if avg_depth < 10.0:
             #     print(i)
             #     continue
+            # if active_env == "fall" and seq == 1:
             all_predictions2.append(depth_diff_percentage2.flatten())
 
-        print(len(all_predictions))
-        print(all_predictions[0].shape)
-        all_predictions = np.concatenate(all_predictions)
-        all_predictions2 = np.concatenate(all_predictions2)
+    print(len(all_predictions))
+    print(all_predictions[0].shape)
+    all_predictions = np.concatenate(all_predictions)
+    all_predictions2 = np.concatenate(all_predictions2)
         
-        # Now all_predictions contains all error values as a flat list
-        plots.plot_error_histograms(all_predictions, errors2=all_predictions2,
-                                   x_ax_label="Error compared to ground truth (%)",
-                                   num_bins=100,
-                                   log_scale_x=False,
-                                   label1="Before removing sky",
-                                   label2="After removing sky",
-                                   ground_truth_line=0,
-                                   title="Depth Pro 3D points compared to ground truth ("+env+" sequence "+str(vkitti_seq[0])+")")
+    # Now all_predictions contains all error values as a flat list
+    plots.plot_error_histograms(all_predictions2, errors2=all_predictions,
+                                x_ax_label="Error compared to ground truth (%)",
+                                num_bins=100,
+                                log_scale_x=False,
+                                label1="All selected sequences without removing sky",
+                                label2="All selected sequences with removed sky",
+                                ground_truth_line=0,
+                                title="Depth Pro 3D points compared to ground truth")
 
 if __name__ == "__main__":
     main()

@@ -5,22 +5,20 @@ from helper import plots
 import numpy as np
 
 def main():
-    # This file creates metrics for how well the scaling of ORB works using deep points
-    # We use the dataset vkitti and midair for testing. The sequences have been choosen for ORB to not lose tracking
-    # dataset = vkitti.dataset("vkitti2")
-    # dataset = vkitti.dataset("vkitti2")
-    dataset = vkitti.dataset("midair", environment="fall")
-    print(dataset.get_all_seq())
-    vkitti_seq=[1]
-    depth = deep.DepthModelWrapper(model_name="depth_pro")
-    # depth = deep.DepthModelWrapper(model_name="depth_anything_v2")
-    # depth = deep.DepthModelWrapper(model_name="metric3d", metric3d_variant="vit_small")
-    # dataset = vkitti.dataset("vkitti2")
-    # vkitti_seq=[4]
-    for seq in vkitti_seq:
+    all_seq = [1,2,8,11,12,13,14,15,21,23]
+    seq_fall = [1,2,8,11,12]
+    out_list=[]
+    depth = deep.DepthModelWrapper(model_name="depth_pro", load_weights=True)
+
+    for seq in all_seq:
+        active_env="spring"
+        if seq in seq_fall:
+            active_env="fall"
+        dataset = vkitti.dataset("midair", environment=active_env)
         dataset.set_sequence(seq)
-        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=True)
-        number_of_deep_frames = 10
+
+        pose_list, points_list, points_2d = orb.run_if_no_saved_values(dataset, override_run=False)
+        number_of_deep_frames = 50
         deep_frames_index = np.linspace(1, len(points_2d)-1, number_of_deep_frames, dtype=int).tolist()
         rgb_path = [dataset.get_rgb_frame_path()[i] for i in deep_frames_index]
         pred_depth, rgb_img = depth.run_with_caching(rgb_path, override_run=True)
@@ -56,17 +54,41 @@ def main():
         scales = orb.all_scales(filtered_selected_orb_frames, filtered_pred_depth)
         scale_factor, scaled_slam_matrices = orb.compute_true_scale(pose_list, dataset.load_extrinsic_matrices())
         predicted_scale = orb.predict_orb_scale(scales)
+
+        temp_dict={}
+        temp_dict["seq"]=seq
+        temp_dict["scale_factor"]=scale_factor
+        temp_dict["predicted_scale"]=predicted_scale
+        temp_dict["active_env"]=active_env
+        out_list.append(temp_dict)
         
-        print("predicted scale: ", predicted_scale)
-        print("true scale: ", scale_factor)
-        print("Used frame indices:", filtered_frame_indices)
+        print("done seq:", seq)
+        # print("environment: ", env)
+        # print("sequence:", curr_seq)
+        # print("predicted scale: ", predicted_scale)
+        # print("true scale: ", scale_factor)
+        # print("Used frame indices:", filtered_frame_indices)
+        # print(f"{env.capitalize()} Seq{curr_seq} & {scale_factor:.3f} & {predicted_scale:.3f} & {abs((predicted_scale - scale_factor) / scale_factor * 100):.2f} \\\\")
+
         
-        plots.plot_error_histograms(scales,
-            num_bins=100,
-            log_scale_x=True,
-            label1="Single Error",
-            ground_truth_line=scale_factor,
-            pred_line=predicted_scale)
+        # plots.plot_error_histograms(scales,
+        #     num_bins=100,
+        #     log_scale_x=False,
+        #     label1="Single Error",
+        #     ground_truth_line=scale_factor,
+        #     pred_line=predicted_scale)
+
+    for item in out_list:
+        env = item["active_env"]
+        curr_seq = item["seq"]
+        scale_factor = item["scale_factor"]
+        predicted_scale = item["predicted_scale"]
+
+        percent_error = abs((predicted_scale - scale_factor) / scale_factor * 100)
+
+        print(f"{env.capitalize()} Seq{curr_seq} & {scale_factor:.3f} & {predicted_scale:.3f} & {percent_error:.2f} \\\\")
+
+
 
 if __name__ == "__main__":
     main()

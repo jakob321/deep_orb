@@ -6,23 +6,14 @@ from helper import plots
 import cv2
 
 def main():
-    # Initialize dataset
-    seq=1
-    env="fall"
+    all_seq = [1,2,8,11,12,13,14,15,21,23]
+    seq_fall = [1,2,8,11,12]
     
-    # env="spring"
-    dataset = vkitti.dataset("midair", environment=env)
-    vkitti_seq = [seq]#sprin 1,7
-    
-    # Image dimensions (assuming these are defined somewhere, adding placeholders)
-    w, h = 1242, 376  # Adjust based on your dataset's image dimensions
-    
-    # Camera parameters
-    focal_length = w/2
-    # [fx, fy, cx, cy]
-    intrinsic = [w/2, h/2, w/2, h/2]
-    
-    for seq in vkitti_seq:
+    for seq in all_seq:
+        active_env="spring"
+        if seq in seq_fall:
+            active_env="fall"
+        dataset = vkitti.dataset("midair", environment=active_env)
         dataset.set_sequence(seq)
         
         # Get ORB points (3D) and their 2D projections
@@ -40,7 +31,7 @@ def main():
         
         # Process each frame with ORB points using vectorized operations
         for frame_idx in range(len(points_2d)):      
-            if frame_idx % 100 != 0: continue         
+            if frame_idx % 10 != 0: continue         
             # Get ground truth depth map for this frame
             gt_depth = dataset.get_depth_frame_np(frame_idx)
             
@@ -101,20 +92,20 @@ def main():
                 perc_diffs = ((valid_orb_depths - valid_gt_depths) / valid_gt_depths) * 100
                 all_diffs.append(perc_diffs)
         
-        # Combine all differences into a single array
-        percentage_differences = np.concatenate(all_diffs) if all_diffs else np.array([])
-        percentage_differences2 = np.concatenate(all_diffs2) if all_diffs2 else np.array([])
-        percentage_differences[percentage_differences<-200] = -200
-        percentage_differences[percentage_differences>200] = 200
+    # Combine all differences into a single array
+    percentage_differences = np.concatenate(all_diffs) if all_diffs else np.array([])
+    percentage_differences2 = np.concatenate(all_diffs2) if all_diffs2 else np.array([])
+    percentage_differences[percentage_differences<-200] = -200
+    percentage_differences[percentage_differences>200] = 200
 
-        plots.plot_error_histograms(percentage_differences2, errors2=percentage_differences,
-                            x_ax_label="Error compared to ground truth (%)",
-                            num_bins=100,
-                            log_scale_x=False,
-                            label1="Before erode",
-                            label2="After erode",
-                            ground_truth_line=0,
-                            title="ORB_SLAM3 3D points compared to ground truth ("+env+" sequence "+str(vkitti_seq[0])+")")
+    plots.plot_error_histograms(percentage_differences2, errors2=percentage_differences,
+                        x_ax_label="Error compared to ground truth (%)",
+                        num_bins=100,
+                        log_scale_x=False,
+                        label1="Before erode",
+                        label2="After erode",
+                        ground_truth_line=0,
+                        title="ORB_SLAM3 3D points compared to ground truth")
         
         
 

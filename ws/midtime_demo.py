@@ -6,6 +6,8 @@ import numpy as np
 import open3d as o3d
 import threading
 import time
+import cv2
+from helper import generic_helper
 
 WIDTH = 1024
 HEIGHT = 1024
@@ -17,7 +19,7 @@ cy=HEIGHT/2
 # fy = 721.5377
 # cx = 609.5593
 # cy = 172.8540
-if True:
+if False:
     intrinsic = o3d.camera.PinholeCameraIntrinsic(WIDTH, HEIGHT, fx, fy, cx, cy)
     vis = o3d.visualization.Visualizer()
     vis.create_window(width=WIDTH, height=HEIGHT)
@@ -26,58 +28,58 @@ if True:
 
 def orb_thread_function(settings_file, rgb_folder_path, dataset):
     # This function will run in a separate thread
-    # orb.run_orb_slam(settings_file, rgb_folder_path)
-    orb.sim_run_orb_slam(dataset, rgb_folder_path, sim_delay=0.01)
+    orb.run_orb_slam(settings_file, rgb_folder_path)
+    # orb.sim_run_orb_slam(dataset, rgb_folder_path, sim_delay=0.01)
 
-def add_depth(p_depth, pose, color_image,scale):
-    global pcd, view_initialized
-    pose[:3, 3] *= (scale/100)
-    p_depth[p_depth>50]=0
-    # Create RGBD image
-    p_depth=p_depth/1
-    rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-        o3d.geometry.Image(color_image), o3d.geometry.Image(p_depth), convert_rgb_to_intensity=False)
+# def add_depth(p_depth, pose, color_image,scale):
+#     global pcd, view_initialized
+#     pose[:3, 3] *= (scale/100)
+#     p_depth[p_depth>50]=0
+#     # Create RGBD image
+#     p_depth=p_depth/1
+#     rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
+#         o3d.geometry.Image(color_image), o3d.geometry.Image(p_depth), convert_rgb_to_intensity=False)
     
-    # Create a new point cloud from the RGBD image
-    new_points = o3d.geometry.PointCloud.create_from_rgbd_image(
-        rgbd_image,
-        intrinsic
-    )
+#     # Create a new point cloud from the RGBD image
+#     new_points = o3d.geometry.PointCloud.create_from_rgbd_image(
+#         rgbd_image,
+#         intrinsic
+#     )
     
-    # Transform the new points
-    # new_points.transform(np.linalg.inv(pose))
-    new_points.transform(pose)
+#     # Transform the new points
+#     # new_points.transform(np.linalg.inv(pose))
+#     new_points.transform(pose)
     
-    # Combine with existing points rather than replacing
-    if len(pcd.points) == 0:
-        pcd.points = new_points.points
-        pcd.colors = new_points.colors
-    else:
-        pcd.points = o3d.utility.Vector3dVector(
-            np.vstack([np.asarray(pcd.points), np.asarray(new_points.points)])
-        )
-        pcd.colors = o3d.utility.Vector3dVector(
-            np.vstack([np.asarray(pcd.colors), np.asarray(new_points.colors)])
-        )
+#     # Combine with existing points rather than replacing
+#     if len(pcd.points) == 0:
+#         pcd.points = new_points.points
+#         pcd.colors = new_points.colors
+#     else:
+#         pcd.points = o3d.utility.Vector3dVector(
+#             np.vstack([np.asarray(pcd.points), np.asarray(new_points.points)])
+#         )
+#         pcd.colors = o3d.utility.Vector3dVector(
+#             np.vstack([np.asarray(pcd.colors), np.asarray(new_points.colors)])
+#         )
     
-    # Update the point cloud geometry
-    vis.update_geometry(pcd)
+#     # Update the point cloud geometry
+#     vis.update_geometry(pcd)
     
-    # Draw camera representation
-    # cameraLines = o3d.geometry.LineSet.create_camera_visualization(
-    #     view_width_px=WIDTH,
-    #     view_height_px=HEIGHT,
-    #     intrinsic=intrinsic.intrinsic_matrix,
-    #     extrinsic=np.linalg.inv(pose),
-    #     scale=0.1
-    # )
+#     # Draw camera representation
+#     # cameraLines = o3d.geometry.LineSet.create_camera_visualization(
+#     #     view_width_px=WIDTH,
+#     #     view_height_px=HEIGHT,
+#     #     intrinsic=intrinsic.intrinsic_matrix,
+#     #     extrinsic=np.linalg.inv(pose),
+#     #     scale=0.1
+#     # )
 
-    # # Add the camera lines to the visualizer
-    # vis.add_geometry(cameraLines)
+#     # # Add the camera lines to the visualizer
+#     # vis.add_geometry(cameraLines)
     
-    # Update visualization
-    vis.poll_events()
-    vis.update_renderer()
+#     # Update visualization
+#     vis.poll_events()
+#     vis.update_renderer()
 
 # def add_camera(pose_list,scale):
 #     global pcd, view_initialized
@@ -105,56 +107,57 @@ def add_depth(p_depth, pose, color_image,scale):
 #     vis.poll_events() # Update visualization
 #     vis.update_renderer()
 
-def add_camera(pose_list,scale):
-    global pcd, view_initialized
-    pose = pose_list[-1]
-    pose[:3, 3] *= (scale/100)
-    view_pose=pose
-    if len(pose_list) >50:
-        view_pose = pose_list[-40].copy()
-        view_pose[:3, 3] *= (scale/100)
-    vis.update_geometry(pcd) # Update the point cloud geometry
+# def add_camera(pose_list,scale):
+#     global pcd, view_initialized
+#     pose = pose_list[-1]
+#     pose[:3, 3] *= (scale/100)
+#     view_pose=pose
+#     if len(pose_list) >50:
+#         view_pose = pose_list[-40].copy()
+#         view_pose[:3, 3] *= (scale/100)
+#     vis.update_geometry(pcd) # Update the point cloud geometry
     
-    # Draw camera representation
-    cameraLines = o3d.geometry.LineSet.create_camera_visualization(
-        view_width_px=WIDTH,
-        view_height_px=HEIGHT,
-        intrinsic=intrinsic.intrinsic_matrix,
-        extrinsic=np.linalg.inv(pose),
-        scale=0.001
-    )
-    vis.add_geometry(cameraLines) # Add the camera lines to the visualizer
-    vc = vis.get_view_control()
-    camera_params = vc.convert_to_pinhole_camera_parameters()
+#     # Draw camera representation
+#     cameraLines = o3d.geometry.LineSet.create_camera_visualization(
+#         view_width_px=WIDTH,
+#         view_height_px=HEIGHT,
+#         intrinsic=intrinsic.intrinsic_matrix,
+#         extrinsic=np.linalg.inv(pose),
+#         scale=0.001
+#     )
+#     vis.add_geometry(cameraLines) # Add the camera lines to the visualizer
+#     vc = vis.get_view_control()
+#     camera_params = vc.convert_to_pinhole_camera_parameters()
 
-    # view_matrix = np.linalg.inv(view_pose).copy()
-    # back_offset = 0.1  # Move backward
-    # up_offset = 0.1    # Move upward
-    # R = view_matrix[:3, :3]
-    # forward = R @ np.array([0, 0, -1])  # Forward direction in world coordinates
-    # up = R @ np.array([0, -1, 0])       # Up direction in world coordinates
-    # view_matrix[:3, 3] += back_offset * forward + up_offset * up
+#     # view_matrix = np.linalg.inv(view_pose).copy()
+#     # back_offset = 0.1  # Move backward
+#     # up_offset = 0.1    # Move upward
+#     # R = view_matrix[:3, :3]
+#     # forward = R @ np.array([0, 0, -1])  # Forward direction in world coordinates
+#     # up = R @ np.array([0, -1, 0])       # Up direction in world coordinates
+#     # view_matrix[:3, 3] += back_offset * forward + up_offset * up
     
-    # camera_params.extrinsic = view_matrix
-    vc.convert_from_pinhole_camera_parameters(camera_params)
-    # vc.set_zoom(1)
+#     # camera_params.extrinsic = view_matrix
+#     vc.convert_from_pinhole_camera_parameters(camera_params)
+#     # vc.set_zoom(1)
 
-    vis.poll_events() # Update visualization
-    vis.update_renderer()
+#     vis.poll_events() # Update visualization
+#     vis.update_renderer()
 
-latest_depth_prediction = None
+depth_prediction = []
 latest_rgb_img = None
 is_done = False
 should_compute = False
 
 def run_deep(dataset, depth):
-    global is_done, latest_depth_prediction, latest_rgb_img, should_compute
+    global is_done, depth_prediction, latest_rgb_img, should_compute
     while not should_compute: # Wait for the other threads to start
         time.sleep(0.1)
     while should_compute:
         index = len(orb.get_current_pose_list())-1
         current_frame = dataset.get_rgb_frame_path()[index]
-        latest_depth_prediction, latest_rgb_img = depth.process_images([current_frame])
+        latest_depth_prediction, latest_rgb_img = depth.process_images([current_frame], caching=False)
+        depth_prediction.append(latest_depth_prediction[0])
         # latest_depth_prediction = latest_depth_prediction[::2, ::2].copy()
         # latest_rgb_img = latest_rgb_img[::2, ::2, :].copy()
         is_done = True
@@ -166,8 +169,8 @@ def main():
     # Environment config
     dataset = vkitti.dataset("midair", environment="spring")
     dataset.set_sequence(1)
-    # depth = deep.DepthModelWrapper(model_name="depth_pro")
-    depth=deep.DepthSim(model_name="depth_pro", inference_time=0.3)
+    depth = deep.DepthModelWrapper(model_name="depth_pro")
+    # depth=deep.DepthSim(model_name="depth_pro", inference_time=0.3)
     
     # Start ORB-SLAM in a separate thread
     orb_thread = threading.Thread(
@@ -184,34 +187,71 @@ def main():
     orb_thread.start()
     time.sleep(5) # Give ORB-SLAM a moment to initialize
     deep_thread.start()
+
+    time_for_orb_scale = []
+    time_for_depth_adjustment=[]
     
     # Process camera poses in the main thread
     while orb.is_slam_thread_running():
         if not orb.started() or not len(orb.get_current_pose_list()): 
             continue # wait until we get our first value
         # print("orb is running")
-        global is_done, latest_depth_prediction, latest_rgb_img, should_compute
+        global is_done, depth_prediction, latest_rgb_img, should_compute
         should_compute = True # make sure depth predictions is done
+        
 
         # Retrieve new pose info
         current_poses = orb.get_current_pose_list()
+        points_2d = orb.get_current_points_2d()
         latest_pose = current_poses[-1]
         scale,_ = orb.compute_true_scale(current_poses, dataset.load_extrinsic_matrices())
-        scale =1
+
+
+        #Calcualte scale
+        if len(depth_prediction) != 0 and len(points_2d) != 0:
+            print(len(depth_prediction))
+            start_time = time.perf_counter()
+            all_scales = orb.all_scales(points_2d, depth_prediction)
+            scale = orb.predict_orb_scale(all_scales)
+            end_time = time.perf_counter()
+            duration = (end_time - start_time)
+            time_for_orb_scale.append(duration)
+
+        
+            p_depth = depth_prediction[-1]
+
+            # Adjust depth
+            start_time = time.perf_counter()
+            p_depth[p_depth > 90] = 100
+            p_depth = generic_helper.compute_kmeans_with_sparse_correction(
+                cv2.erode(p_depth, np.ones((5, 5), np.uint8)), fx, fy, cx, cy,
+                points_2d,
+                n_clusters=25,
+                depth_weight=0.8
+            )
+            end_time = time.perf_counter()
+            duration = (end_time - start_time)
+            time_for_depth_adjustment.append(duration)
+        
+
+
         # Check if new depth prediction is done, else only add camera pose
         if is_done:
             print("depth done :)))")
-            add_depth(latest_depth_prediction, latest_pose, latest_rgb_img, scale)
+            # add_depth(latest_depth_prediction, latest_pose, latest_rgb_img, scale)
             is_done = False
         else:
             pass
-            add_camera(current_poses, scale)
+            # add_camera(current_poses, scale)
     should_compute = False
     
     # Wait for the ORB thread to complete
     orb_thread.join()
     deep_thread.join()
-    vis.run()
+
+    print(time_for_depth_adjustment)
+    print(time_for_orb_scale)
+    # vis.run()
     
 if __name__ == "__main__":
     main()

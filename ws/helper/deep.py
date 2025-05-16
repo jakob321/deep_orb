@@ -315,6 +315,7 @@ class DepthModelWrapper:
         """
         all_depth = []
         all_orig = []
+        all_focal=[]
         
         # Create a unique identifier for this sequence
         if caching:
@@ -352,6 +353,7 @@ class DepthModelWrapper:
                 prediction = self.run_inference_half(image, f_px, label="img")
                 depth = prediction["depth"].cpu().numpy()  # Convert depth tensor to numpy array
                 pred_focal_length = prediction["focallength_px"].cpu().numpy()
+                all_focal.append(pred_focal_length)
             
             elif self.model_name == "depth_anything_v2":
                 # For depth_anything_v2, we use cv2 to read the image
@@ -424,7 +426,7 @@ class DepthSim:
     def process_images(self, paths, index=0):
         print("sim depth timer...")
         time.sleep(self.inference_time) # This assumes the data is already cached
-        all_depth, all_orig = self.dmw.process_images(paths, caching=True)
+        all_depth, all_orig, all_focal = self.dmw.process_images(paths, caching=True)
         return all_depth[index], all_orig[index]
 
 

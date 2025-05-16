@@ -42,6 +42,20 @@ class dataset:
             self.settings_file = "../ORB_SLAM3/Examples/Monocular/KITTI03.yaml"
         if self.dataset_name == "midair":
             # good winter seq: 0,1,2,3
+            # good fall 2, 8, 11, 12, 13
+
+            # seq | season |i | cashed?
+            # 1     fall    1   yes
+            # 2     fall    2   yes
+            # 8     fall    3   yes
+            # 11    fall    4   yes
+            # 12    fall    5   yes
+            # 13    spring  6   yes
+            # 14    spring  7   yes 
+            # 15    spring  8   yes - mountains
+            # 21    spring  9   yes
+            # 23    spring  10  yes - tree circle
+
             self.path_dataset = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/color_left"
             self.path_depth = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/depth"
             self.extrinsic_file = "../datasets/midair/MidAir/PLE_training/"+self.environment+"/sensor_records.hdf5"
@@ -186,16 +200,46 @@ class dataset:
             #img=img*2
             return img
         elif self.dataset_name == "midair":
-            frame_path = self.path_depth + "/" + self.active_seq + "/" + self.img_folder_name
+            # frame_path = self.path_depth + "/" + self.active_seq + "/" + self.img_folder_name
+            # if self.nr_of_img == 0 or not self.depth_img_path:
+            #     self.depth_img_path = self.get_all_subfolders(frame_path)
+            # print(self.depth_img_path[nr])
+            # pic = Image.open(self.depth_img_path[nr])
+            # img = np.asarray(pic, np.uint16)
+            # img.dtype = np.float16
+            # if img is None:
+            #     raise ValueError(f"Error: Unable to load image at '{self.depth_img_path[nr]}'.")
+            # return img
+            # build path to this frame’s depth‐map
+
+            frame_path = f"{self.path_depth}/{self.active_seq}/{self.img_folder_name}"
             if self.nr_of_img == 0 or not self.depth_img_path:
                 self.depth_img_path = self.get_all_subfolders(frame_path)
-            print(self.depth_img_path[nr])
-            pic = Image.open(self.depth_img_path[nr])
-            img = np.asarray(pic, np.uint16)
-            img.dtype = np.float16
-            if img is None:
-                raise ValueError(f"Error: Unable to load image at '{self.depth_img_path[nr]}'.")
-            return img
+            
+            # load the Euclidean‐depth PNG
+            depth_path = self.depth_img_path[nr]
+            print(depth_path)
+            pic = Image.open(depth_path)
+            euclid = np.asarray(pic, np.uint16)  # shape (H, W), units = meters
+            euclid.dtype = np.float16
+            # intrinsics (for MidAir they’re WIDTH=HEIGHT=1024)
+            H, W = euclid.shape
+            f  = W / 2.0
+            cx = W / 2.0
+            cy = H / 2.0
+
+            # build a per‐pixel ray length sqrt((u-cx)^2 + (v-cy)^2 + f^2)
+            u = np.arange(W, dtype=np.float32)
+            v = np.arange(H, dtype=np.float32)
+            uu, vv = np.meshgrid(u, v)
+            du = uu - cx
+            dv = vv - cy
+            ray_norm = np.sqrt(du*du + dv*dv + f*f)
+
+            # convert Euclidean‐distance → axial‐distance: Z = z_euclid * f / sqrt(...)
+            axial = euclid * (f / ray_norm)
+
+            return axial
         if self.dataset_name == "vkitti2":
             frame_path = self.path_depth + "/" + self.active_seq + "/clone/frames/depth/Camera_0"
             if self.nr_of_img == 0 or not self.depth_img_path:

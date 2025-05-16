@@ -54,16 +54,16 @@ def plot_image(rgb_img, depth_map):
 
 def main():
     # Environment config
-    dataset = vkitti.dataset("midair", environment="spring")
-    dataset.set_sequence(1)
+    dataset = vkitti.dataset("midair", environment="fall")
+    dataset.set_sequence(11)
     pose_list, points_list, points_2d = orb.run_if_no_saved_values(
         dataset, override_run=False
     )
     orb_true_scale, pose_list = orb.compute_true_scale(
         pose_list, dataset.load_extrinsic_matrices()
     )
-    # dmw = deep.DepthModelWrapper(model_name="depth_anything_v2", load_weights=True)
-    dmw = deep.DepthModelWrapper(model_name="depth_pro", load_weights=False)
+    dmw = deep.DepthModelWrapper(model_name="depth_anything_v2", load_weights=True)
+    # dmw = deep.DepthModelWrapper(model_name="depth_pro", load_weights=True)
     depth_paths = dataset.get_rgb_frame_path()
 
     for index in range(len(depth_paths)):
@@ -74,7 +74,7 @@ def main():
         pose = pose_list[index]
         pose[:3, 3] *= 1 / (50 * orb_true_scale)
         
-        # Create depth prediction for current frame
+        # # Create depth prediction for current frame
         depth_path = [depth_paths[index]]
         p_depth, color_image = dmw.process_images(depth_path, caching=True)
         p_depth = p_depth[0]

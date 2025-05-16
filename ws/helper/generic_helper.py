@@ -129,11 +129,10 @@ def scale_predicted_depth(p_depth, orb_points_2d):
     orb_depths = orb_points_2d[2]
 
     # We erode so that the ORB points hit correct surface with greater chance
-    p_depth_eroded = cv2.erode(p_depth, np.ones((5, 5), np.uint8))    
+    p_depth_eroded = cv2.erode(p_depth, np.ones((3, 3), np.uint8))    
     depth_at_orb_points = p_depth_eroded[orb_v, orb_u]
     scale_ratios = orb_depths / depth_at_orb_points
     median_scale = np.median(scale_ratios)
-
     return p_depth * median_scale
 
 def create_correction_map(p_depth, orb_points_2d, rgb_image):
